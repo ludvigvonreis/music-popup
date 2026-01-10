@@ -1,0 +1,13 @@
+[package]
+name = "music-popup"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3.9", features = ["client"]}
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wgpu = "28.0.0"
+glyphon = "0.6"
+pollster = "0.3"
+raw-window-handle = "0.6.0"
