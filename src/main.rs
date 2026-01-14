@@ -14,7 +14,14 @@ use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
 use std::{fmt::Error, ptr::NonNull};
-use wgpu::SurfaceTargetUnsafe;
+use wgpu::{RenderPass, SurfaceTargetUnsafe};
+
+mod backend;
+mod ui;
+use crate::{
+    backend::state::WGPUState,
+    ui::{RenderUi, image::Image},
+};
 
 struct State {
     compositor: Option<WlCompositor>,
@@ -160,23 +167,13 @@ impl Dispatch<WlSurface, ()> for State {
     }
 }
 
-struct WGPUState {
-    surface: wgpu::Surface<'static>,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    surface_format: wgpu::TextureFormat,
-
-    counter: i32,
-}
-
 /* ---------- main ---------- */
 
 fn main() {
     pollster::block_on(run());
 }
 
-async fn run() { 
+async fn run() {
     let conn = Connection::connect_to_env().unwrap();
     let display = conn.display();
     let mut event_queue = conn.new_event_queue();
@@ -204,21 +201,43 @@ async fn run() {
     );
 
     layer_surface.set_anchor(Anchor::Top | Anchor::Right);
-	layer_surface.set_margin(40, 40, 0, 0);
+    layer_surface.set_margin(40, 40, 0, 0);
     layer_surface.set_exclusive_zone(-1);
-    layer_surface.set_size(300, 80);
+    layer_surface.set_size(500, 500);
 
     surface.commit();
 
     state.layer_surface = Some(layer_surface);
 
-    let mut wgpu_state = create_pipeline(display, surface).await.unwrap();
+    let mut wgpu_state = WGPUState::new(display, surface).await;
+	
+	let img2 = Image {
+		color: [0.0, 1.0, 0.0, 1.0], // Red
+		children: Vec::new(),
+		position: [0.0, 0.5],
+		size: [1.0, 2.0],
+		texture_index: 0,
+	};
+    let img = Image {
+        color: [1.0, 0.0, 1.0, 1.0], // Red
+        children: vec![/*Box::new(img2)*/],
+        position: [0.0, 0.0],
+        size: [1.0, 1.0],
+        texture_index: 0,
+    };
+
+
+    let mut ui_renderer = RenderUi::new(Box::new(img));
+    ui_renderer.create_buffers(&wgpu_state);
+	ui_renderer.create_pipelines(&wgpu_state);
 
     // Event loop
     loop {
         event_queue.blocking_dispatch(&mut state).unwrap();
         if state.configured && state.redraw {
-            render(&mut wgpu_state);
+            render(&mut wgpu_state, |state, pass| {
+				ui_renderer.render(&state, pass);
+			});
 
             let surface = state.surface.as_ref().unwrap();
             surface.frame(&qh, ());
@@ -229,9 +248,10 @@ async fn run() {
     }
 }
 
-fn render(state: &mut WGPUState) {
-    state.counter += 1;
-
+fn render<F>(state: &mut WGPUState, mut f: F)
+where
+    F: FnMut(&mut WGPUState, &mut RenderPass),
+{
     // Create texture view
     let surface_texture = state
         .surface
@@ -246,18 +266,12 @@ fn render(state: &mut WGPUState) {
             ..Default::default()
         });
 
-    let color: wgpu::Color;
-	let color = if (state.counter / 100) % 2 == 0 {
-		wgpu::Color::RED
-	} else {
-		wgpu::Color::GREEN
-	};
-
+    let color: wgpu::Color = wgpu::Color::WHITE;
 
     // Renders a GREEN screen
     let mut encoder = state.device.create_command_encoder(&Default::default());
     // Create the renderpass which will clear the screen.
-    let renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: None,
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: &texture_view,
@@ -276,91 +290,12 @@ fn render(state: &mut WGPUState) {
 
     // If you wanted to call any drawing commands, they would go here.
 
+	f(state, &mut renderpass);
+
     // End the renderpass.
     drop(renderpass);
 
     // Submit the command in the queue to execute
     state.queue.submit([encoder.finish()]);
     surface_texture.present();
-}
-
-async fn create_pipeline(display: WlDisplay, surface: WlSurface) -> Result<WGPUState, Error> {
-    let handle_window: RawWindowHandle = {
-        let surface_id = surface.id();
-        let pointer = NonNull::new(surface_id.as_ptr() as *mut _).expect("window pointer");
-        RawWindowHandle::Wayland(WaylandWindowHandle::new(pointer))
-    };
-    let handle_display: RawDisplayHandle = {
-        let display_id = display.id();
-        let pointer = NonNull::new(display_id.as_ptr() as *mut _).expect("display pointer");
-        RawDisplayHandle::Wayland(WaylandDisplayHandle::new(pointer))
-    };
-
-    let surface_target = SurfaceTargetUnsafe::RawHandle {
-        raw_display_handle: handle_display.clone(),
-        raw_window_handle: handle_window.clone(),
-    };
-
-    let instance = wgpu::Instance::default();
-    let surface = unsafe {
-        instance
-            .create_surface_unsafe(surface_target)
-            .expect("surface unsafe")
-    };
-
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        })
-        .await
-        .expect("Adapter");
-
-    let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor {
-            label: None,
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::default(),
-            experimental_features: wgpu::ExperimentalFeatures::disabled(),
-            memory_hints: Default::default(),
-            trace: wgpu::Trace::Off,
-        })
-        .await
-        .expect("Device");
-
-    let surface_caps = surface.get_capabilities(&adapter);
-    // Shader code in this tutorial assumes an sRGB surface texture. Using a different
-    // one will result in all the colors coming out darker. If you want to support non
-    // sRGB surfaces, you'll need to account for that when drawing to the frame.
-    let surface_format = surface_caps
-        .formats
-        .iter()
-        .find(|f| f.is_srgb())
-        .copied()
-        .unwrap_or(surface_caps.formats[0]);
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface_format,
-        width: 300,
-        height: 80,
-        present_mode: surface_caps.present_modes[0],
-        alpha_mode: surface_caps.alpha_modes[0],
-        view_formats: vec![],
-        desired_maximum_frame_latency: 2,
-    };
-
-    surface.configure(&device, &config);
-
-    let cap = surface.get_capabilities(&adapter);
-    let surface_format = cap.formats[0];
-
-    Ok(WGPUState {
-        surface,
-        device,
-        queue,
-        config,
-        surface_format,
-        counter: 0,
-    })
 }

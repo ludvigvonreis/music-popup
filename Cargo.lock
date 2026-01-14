@@ -768,6 +768,7 @@ dependencies = [
 name = "music-popup"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "glyphon",
  "pollster",
  "raw-window-handle",
