@@ -18,7 +18,7 @@ pub struct WGPUState {
 }
 
 impl WGPUState {
-    pub async fn new(display: WlDisplay, surface: WlSurface) -> Self {
+    pub async fn new(display: &WlDisplay, surface: &WlSurface) -> Self {
         let handle_window: RawWindowHandle = {
             let surface_id = surface.id();
             let pointer = NonNull::new(surface_id.as_ptr() as *mut _).expect("window pointer");

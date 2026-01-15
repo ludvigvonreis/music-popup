@@ -19,153 +19,150 @@ use wgpu::{RenderPass, SurfaceTargetUnsafe};
 mod backend;
 mod ui;
 use crate::{
-    backend::state::WGPUState,
+    backend::{state::WGPUState, window::Window},
     ui::{RenderUi, image::Image},
 };
 
-struct State {
-    compositor: Option<WlCompositor>,
-    layer_shell: Option<ZwlrLayerShellV1>,
-    surface: Option<WlSurface>,
-    layer_surface: Option<ZwlrLayerSurfaceV1>,
-    configured: bool,
-    redraw: bool,
-}
+// struct State {
+//     compositor: Option<WlCompositor>,
+//     layer_shell: Option<ZwlrLayerShellV1>,
+//     surface: Option<WlSurface>,
+//     layer_surface: Option<ZwlrLayerSurfaceV1>,
+//     configured: bool,
+//     redraw: bool,
+// }
 
-impl State {
-    fn new() -> Self {
-        Self {
-            compositor: None,
-            layer_shell: None,
-            surface: None,
-            layer_surface: None,
-            configured: false,
-            redraw: false,
-        }
-    }
-}
+// impl State {
+//     fn new() -> Self {
+//         Self {
+//             compositor: None,
+//             layer_shell: None,
+//             surface: None,
+//             layer_surface: None,
+//             configured: false,
+//             redraw: false,
+//         }
+//     }
+// }
 
-/* ---------- Registry handling ---------- */
+// /* ---------- Registry handling ---------- */
+// impl Dispatch<WlRegistry, ()> for State {
+//     fn event(
+//         state: &mut Self,
+//         registry: &WlRegistry,
+//         event: <WlRegistry as wayland_client::Proxy>::Event,
+//         _: &(),
+//         _: &Connection,
+//         qh: &QueueHandle<Self>,
+//     ) {
+//         if let wayland_client::protocol::wl_registry::Event::Global {
+//             name,
+//             interface,
+//             version,
+//         } = event
+//         {
+//             //println!("{}", interface.as_str());
+//             match interface.as_str() {
+//                 "wl_compositor" => {
+//                     let compositor =
+//                         registry.bind::<WlCompositor, _, _>(name, version.min(4), qh, ());
+//                     println!("hello compositor");
+//                     state.compositor = Some(compositor);
+//                 }
+//                 "zwlr_layer_shell_v1" => {
+//                     let shell =
+//                         registry.bind::<ZwlrLayerShellV1, _, _>(name, version.min(4), qh, ());
+//                     println!("hello shell");
+//                     state.layer_shell = Some(shell);
+//                 }
+//                 _ => {}
+//             }
+//         }
+//     }
+// }
 
-impl Dispatch<WlRegistry, ()> for State {
-    fn event(
-        state: &mut Self,
-        registry: &WlRegistry,
-        event: <WlRegistry as wayland_client::Proxy>::Event,
-        _: &(),
-        _: &Connection,
-        qh: &QueueHandle<Self>,
-    ) {
-        if let wayland_client::protocol::wl_registry::Event::Global {
-            name,
-            interface,
-            version,
-        } = event
-        {
-            //println!("{}", interface.as_str());
-            match interface.as_str() {
-                "wl_compositor" => {
-                    let compositor =
-                        registry.bind::<WlCompositor, _, _>(name, version.min(4), qh, ());
-                    println!("hello compositor");
-                    state.compositor = Some(compositor);
-                }
-                "zwlr_layer_shell_v1" => {
-                    let shell =
-                        registry.bind::<ZwlrLayerShellV1, _, _>(name, version.min(4), qh, ());
-                    println!("hello shell");
-                    state.layer_shell = Some(shell);
-                }
-                _ => {}
-            }
-        }
-    }
-}
+// /* ---------- Layer surface events ---------- */
+// impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
+//     fn event(
+//         state: &mut Self,
+//         surface: &ZwlrLayerSurfaceV1,
+//         event: <ZwlrLayerSurfaceV1 as wayland_client::Proxy>::Event,
+//         _: &(),
+//         _: &Connection,
+//         _: &QueueHandle<Self>,
+//     ) {
+//         match event {
+//             wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Event::Configure {
+//                 serial,
+//                 width,
+//                 height,
+//             } => {
+//                 surface.ack_configure(serial);
+//                 state.configured = true;
+// 				state.redraw = true;
 
-/* ---------- Layer surface events ---------- */
+//                 // Later: resize wgpu surface here
+//                 let _ = (width, height);
+//             }
+//             wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Event::Closed => {
+//                 std::process::exit(0);
+//             }
+//             _ => {}
+//         }
+//     }
+// }
 
-impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
-    fn event(
-        state: &mut Self,
-        surface: &ZwlrLayerSurfaceV1,
-        event: <ZwlrLayerSurfaceV1 as wayland_client::Proxy>::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        match event {
-            wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Event::Configure {
-                serial,
-                width,
-                height,
-            } => {
-                surface.ack_configure(serial);
-                state.configured = true;
-				state.redraw = true;
+// impl Dispatch<wl_callback::WlCallback, ()> for State {
+//     fn event(
+//         state: &mut Self,
+//         _callback: &wl_callback::WlCallback,
+//         event: wl_callback::Event,
+//         _: &(),
+//         _: &Connection,
+//         _: &QueueHandle<Self>,
+//     ) {
+//         if let wl_callback::Event::Done { .. } = event {
+//             state.redraw = true;
+//         }
+//     }
+// }
 
-                // Later: resize wgpu surface here
-                let _ = (width, height);
-            }
-            wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Event::Closed => {
-                std::process::exit(0);
-            }
-            _ => {}
-        }
-    }
-}
+// /* ---------- Unused but required ---------- */
+// impl Dispatch<WlCompositor, ()> for State {
+//     fn event(
+//         _: &mut Self,
+//         _: &WlCompositor,
+//         _: <WlCompositor as wayland_client::Proxy>::Event,
+//         _: &(),
+//         _: &Connection,
+//         _: &QueueHandle<Self>,
+//     ) {
+//     }
+// }
 
-impl Dispatch<wl_callback::WlCallback, ()> for State {
-    fn event(
-        state: &mut Self,
-        _callback: &wl_callback::WlCallback,
-        event: wl_callback::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        if let wl_callback::Event::Done { .. } = event {
-            state.redraw = true;
-        }
-    }
-}
+// impl Dispatch<ZwlrLayerShellV1, ()> for State {
+//     fn event(
+//         _: &mut Self,
+//         _: &ZwlrLayerShellV1,
+//         _: <ZwlrLayerShellV1 as wayland_client::Proxy>::Event,
+//         _: &(),
+//         _: &Connection,
+//         _: &QueueHandle<Self>,
+//     ) {
+//     }
+// }
 
-/* ---------- Unused but required ---------- */
-
-impl Dispatch<WlCompositor, ()> for State {
-    fn event(
-        _: &mut Self,
-        _: &WlCompositor,
-        _: <WlCompositor as wayland_client::Proxy>::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<ZwlrLayerShellV1, ()> for State {
-    fn event(
-        _: &mut Self,
-        _: &ZwlrLayerShellV1,
-        _: <ZwlrLayerShellV1 as wayland_client::Proxy>::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<WlSurface, ()> for State {
-    fn event(
-        _: &mut Self,
-        _: &WlSurface,
-        _: <WlSurface as wayland_client::Proxy>::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
+// impl Dispatch<WlSurface, ()> for State {
+//     fn event(
+//         _: &mut Self,
+//         _: &WlSurface,
+//         _: <WlSurface as wayland_client::Proxy>::Event,
+//         _: &(),
+//         _: &Connection,
+//         _: &QueueHandle<Self>,
+//     ) {
+//     }
+// }
 
 /* ---------- main ---------- */
 
@@ -174,50 +171,57 @@ fn main() {
 }
 
 async fn run() {
-    let conn = Connection::connect_to_env().unwrap();
-    let display = conn.display();
-    let mut event_queue = conn.new_event_queue();
-    let qh = event_queue.handle();
+    // let conn = Connection::connect_to_env().unwrap();
+    // let display = conn.display();
+    // let mut event_queue = conn.new_event_queue();
+    // let qh = event_queue.handle();
 
-    let registry = display.get_registry(&qh, ());
-    let mut state = State::new();
+    // let registry = display.get_registry(&qh, ());
+    // let mut state = State::new();
 
-    // Roundtrip to gather globals
-    event_queue.roundtrip(&mut state).unwrap();
+    // // Roundtrip to gather globals
+    // event_queue.roundtrip(&mut state).unwrap();
 
-    let compositor = state.compositor.as_ref().unwrap();
-    let layer_shell = state.layer_shell.as_ref().unwrap();
+    // let compositor = state.compositor.as_ref().unwrap();
+    // let layer_shell = state.layer_shell.as_ref().unwrap();
 
-    let surface = compositor.create_surface(&qh, ());
-    state.surface = Some(surface.clone());
+    // let surface = compositor.create_surface(&qh, ());
+    // state.surface = Some(surface.clone());
 
-    let layer_surface = layer_shell.get_layer_surface(
-        &surface,
-        None,
-        Layer::Overlay,
-        "music-popup".into(),
-        &qh,
-        (),
+    // let layer_surface = layer_shell.get_layer_surface(
+    //     &surface,
+    //     None,
+    //     Layer::Overlay,
+    //     "music-popup".into(),
+    //     &qh,
+    //     (),
+    // );
+
+    // layer_surface.set_anchor(Anchor::Top | Anchor::Right);
+    // layer_surface.set_margin(40, 40, 0, 0);
+    // layer_surface.set_exclusive_zone(-1);
+    // layer_surface.set_size(500, 500);
+
+    // surface.commit();
+
+    // state.layer_surface = Some(layer_surface);
+
+    let mut window = Window::new(
+        "Music Widget",
+        (500, 500),
+        (40, 40, 0, 0),
+        Anchor::Top | Anchor::Right,
     );
 
-    layer_surface.set_anchor(Anchor::Top | Anchor::Right);
-    layer_surface.set_margin(40, 40, 0, 0);
-    layer_surface.set_exclusive_zone(-1);
-    layer_surface.set_size(500, 500);
+    let mut wgpu_state = {
+        let (display, surface) = match (&window.display, &window.surface) {
+            (Some(d), Some(s)) => (d, s),
+            _ => return,
+        };
 
-    surface.commit();
+        WGPUState::new(&display, &surface).await
+    };
 
-    state.layer_surface = Some(layer_surface);
-
-    let mut wgpu_state = WGPUState::new(display, surface).await;
-	
-	let img2 = Image {
-		color: [0.0, 1.0, 0.0, 1.0], // Red
-		children: Vec::new(),
-		position: [0.0, 0.5],
-		size: [1.0, 2.0],
-		texture_index: 0,
-	};
     let img = Image {
         color: [1.0, 0.0, 1.0, 1.0], // Red
         children: vec![/*Box::new(img2)*/],
@@ -226,26 +230,31 @@ async fn run() {
         texture_index: 0,
     };
 
-
     let mut ui_renderer = RenderUi::new(Box::new(img));
     ui_renderer.create_buffers(&wgpu_state);
-	ui_renderer.create_pipelines(&wgpu_state);
+    ui_renderer.create_pipelines(&wgpu_state);
+
+    window.event_loop(|| {
+        render(&mut wgpu_state, |state, pass| {
+            ui_renderer.render(&state, pass);
+        });
+    });
 
     // Event loop
-    loop {
-        event_queue.blocking_dispatch(&mut state).unwrap();
-        if state.configured && state.redraw {
-            render(&mut wgpu_state, |state, pass| {
-				ui_renderer.render(&state, pass);
-			});
+    // loop {
+    //     event_queue.blocking_dispatch(&mut state).unwrap();
+    //     if state.configured && state.redraw {
+    //         render(&mut wgpu_state, |state, pass| {
+    // 			ui_renderer.render(&state, pass);
+    // 		});
 
-            let surface = state.surface.as_ref().unwrap();
-            surface.frame(&qh, ());
-            surface.commit();
+    //         let surface = state.surface.as_ref().unwrap();
+    //         surface.frame(&qh, ());
+    //         surface.commit();
 
-            state.redraw = false;
-        }
-    }
+    //         state.redraw = false;
+    //     }
+    // }
 }
 
 fn render<F>(state: &mut WGPUState, mut f: F)
@@ -290,7 +299,7 @@ where
 
     // If you wanted to call any drawing commands, they would go here.
 
-	f(state, &mut renderpass);
+    f(state, &mut renderpass);
 
     // End the renderpass.
     drop(renderpass);
