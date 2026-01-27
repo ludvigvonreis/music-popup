@@ -1,3 +1,10 @@
+struct GlobalUniforms {
+    viewport: vec2<f32>, // width, height
+};
+
+@group(0) @binding(0)
+var<uniform> u: GlobalUniforms;
+
 struct Vertex {
     @location(0) position: vec2<f32>, // local quad vertex [-0.5,0.5]
 };
@@ -13,43 +20,56 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
 	@location(1) uv: vec2<f32>,
+    @location(2) instance_size: vec2<f32>,
+    //@location(3) viewport: vec2<f32>,
 };
 
 @vertex
 fn vs_main(vertex: Vertex, instance: Instance) -> VertexOutput {
     var out: VertexOutput;
 
-    // Apply size and position
-    let scaled_pos = vertex.position * instance.instance_size + instance.instance_pos;
+	let scale: vec2<f32> = (instance.instance_size / u.viewport);
 
-    out.clip_position = vec4<f32>(scaled_pos, 0.0, 1.0);
+	// Apply size to the vertex shape
+	let scaled_vertex = vertex.position * scale;
+
+	// Now add instance offset
+	let final_pos = scaled_vertex + instance.instance_pos;
+
+	out.clip_position = vec4<f32>(final_pos, 0.0, 1.0);
+
+	out.uv = vertex.position * (instance.instance_size);
+
     out.color = instance.instance_color;
-
-	out.uv = (vertex.position.xy + vec2f(1.0, 1.0)) * 0.5;
+	out.instance_size = instance.instance_size;
 
     return out;
 }
 
+
+
+fn sdRoundedBox2D(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
+    let q = abs(p) - b;
+    return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
 @fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let uv = input.uv;           // 0..1 inside quad
-    let radius: f32 = 0.1;       // corner radius
-    let center = vec2f(0.5, 0.5);
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let radius = 10.0;
+    let halfSize = in.instance_size / 2;
 
-    // Shift uv to quad space centered at center
-    let p = uv - center;
+    let p = in.uv * 0.5;
+    let d = sdRoundedBox2D(p, halfSize - radius, radius);
 
-    // Half-size of quad (since uv goes 0..1, half-size = 0.5)
-    let half_size = vec2f(0.5, 0.5);
+    // simple anti-aliased color
+    var color = in.color.xyz;
+    let alpha = smoothstep(0.0, 1.0, -d); // negative inside
 
-    // Distance from rectangle edges minus radius
-    let d = abs(p) - (half_size - vec2f(radius, radius));
+	let centerDistance = length(in.uv);
+    let dotRadius = 5.0; // 1 pixel
+    let centerDot = smoothstep(dotRadius + 0.5, dotRadius - 0.5, centerDistance);
+
+    color = mix(color, vec3<f32>(0.0, 0.0, 0.0), centerDot);
     
-    // Take max distance outside rectangle
-    let dist = max(d.x, d.y);
-
-    // Smooth alpha at corners, fully opaque inside
-    let alpha = smoothstep(0.0, 0.01, -dist) * 0.5; // 0.5 base opacity
-
-    return vec4f(input.color.rgb, alpha);
+	return vec4<f32>(color, alpha);
 }
