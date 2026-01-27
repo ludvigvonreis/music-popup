@@ -1,4 +1,4 @@
-use std::ptr::NonNull;
+use std::{os::unix::raw::dev_t, ptr::NonNull};
 
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
@@ -7,7 +7,7 @@ use wayland_client::{
     Proxy,
     protocol::{wl_display::WlDisplay, wl_surface::WlSurface},
 };
-use wgpu::{Buffer, RenderPipeline, SurfaceTargetUnsafe, VertexBufferLayout, util::DeviceExt};
+use wgpu::{BindGroup, BindGroupLayout, Buffer, RenderPipeline, SurfaceTargetUnsafe, VertexBufferLayout, util::DeviceExt};
 
 pub struct WGPUState {
     pub surface: wgpu::Surface<'static>,
@@ -15,10 +15,11 @@ pub struct WGPUState {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub surface_format: wgpu::TextureFormat,
+	pub size: (u32, u32),
 }
 
 impl WGPUState {
-    pub async fn new(display: &WlDisplay, surface: &WlSurface) -> Self {
+    pub async fn new(display: &WlDisplay, surface: &WlSurface, size: (u32, u32)) -> Self {
         let handle_window: RawWindowHandle = {
             let surface_id = surface.id();
             let pointer = NonNull::new(surface_id.as_ptr() as *mut _).expect("window pointer");
@@ -76,10 +77,13 @@ impl WGPUState {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: 500,
-            height: 500,
+            width: size.0,
+            height: size.1,
             present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
+            alpha_mode: surface_caps.alpha_modes.iter()
+				.copied()
+				.find(|m| *m == wgpu::CompositeAlphaMode::PreMultiplied)
+				.unwrap_or(surface_caps.alpha_modes[0]),
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
@@ -95,6 +99,7 @@ impl WGPUState {
             queue,
             config,
             surface_format,
+			size
         }
     }
 
@@ -103,6 +108,7 @@ impl WGPUState {
         pipeline_label: &str,
         shader_source: &str,
         buffers: &'a [VertexBufferLayout<'a>],
+		bind_group_layouts: &[&BindGroupLayout]
     ) -> RenderPipeline {
         let shader = self
             .device
@@ -115,7 +121,7 @@ impl WGPUState {
             self.device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some(pipeline_label),
-                    bind_group_layouts: &[],
+                    bind_group_layouts: &bind_group_layouts,
                     immediate_size: 0,
                 });
 
@@ -189,4 +195,12 @@ impl WGPUState {
     pub fn write_buffer(&self, buffer: &Buffer, offset: u64, data: &[u8]) {
         self.queue.write_buffer(buffer, offset, data);
     }
+
+	pub fn create_bind_group_layout(&self, descriptor: &wgpu::BindGroupLayoutDescriptor<'_>) -> BindGroupLayout {
+		self.device.create_bind_group_layout(descriptor)
+	}
+	
+	pub fn create_bind_group(&self, descriptor: &wgpu::BindGroupDescriptor<'_>) -> BindGroup {
+		self.device.create_bind_group(descriptor)
+	}
 }

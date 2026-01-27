@@ -24,6 +24,7 @@ pub struct Window {
     pub redraw: bool,
 
     size: (u32, u32),
+	scaling_ratio: f32,
     title: String,
 }
 /* ---------- Registry handling ---------- */
@@ -164,6 +165,7 @@ impl Window {
             configured: false,
             redraw: false,
             size,
+			scaling_ratio: (size.0 / size.1) as f32,
             title: title.to_owned(),
         };
 
@@ -174,7 +176,7 @@ impl Window {
         let mut event_queue = conn.new_event_queue();
         let qh = event_queue.handle();
 
-        let registry = display.get_registry(&qh, ());
+        let _registry = display.get_registry(&qh, ());
 
         // Roundtrip to gather globals
         event_queue.roundtrip(&mut state).unwrap();
@@ -206,15 +208,26 @@ impl Window {
     }
 
     pub fn resize(&self, size: (u32, u32)) -> &Self {
+		if let Some(layer_surface) = &self.layer_surface {
+			layer_surface.set_size(size.0, size.1);
+
+			self.commit_surface();
+		}
         self
     }
+
+	fn commit_surface(&self) -> &Self {
+		if let Some(surface) = &self.surface {
+			surface.commit();
+		}
+
+		self
+	}
 
     pub fn event_loop<F>(&mut self, mut f: F)
     where
         F: FnMut(),
     {
-		println!("{:?}", self.event_queue);
-
         loop {
             let mut event_queue = self.event_queue.take().expect("event_queue missing");
 
