@@ -64,12 +64,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // simple anti-aliased color
     var color = in.color.xyz;
     let alpha = smoothstep(0.0, 1.0, -d); // negative inside
-
-	let centerDistance = length(in.uv);
-    let dotRadius = 5.0; // 1 pixel
-    let centerDot = smoothstep(dotRadius + 0.5, dotRadius - 0.5, centerDistance);
-
-    color = mix(color, vec3<f32>(0.0, 0.0, 0.0), centerDot);
     
 	return vec4<f32>(color, alpha);
 }

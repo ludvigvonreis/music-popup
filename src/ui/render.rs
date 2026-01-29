@@ -273,6 +273,7 @@ impl RenderUi {
             (self.quad_pipeline.as_ref(), self.quad_buffers.as_ref(), self.bind_group_context.uniforms_group.as_ref())
         {
             pass.set_pipeline(&quad_pipeline);
+
             pass.set_vertex_buffer(0, quad_buffers.vertex_buffer.slice(..));
             pass.set_vertex_buffer(1, quad_buffers.instance_buffer.slice(..));
 

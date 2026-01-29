@@ -33,7 +33,7 @@ async fn run() {
     };
 
     let img = Image {
-        color: [0.69, 0.15, 0.43, 1.0], // Red
+        color: [0.368, 0.611, 0.145, 1.0], // Red
         children: vec![/*Box::new(img2)*/],
         position: [0.0, 0.0],
         size: [340.0, 90.0],
@@ -52,6 +52,13 @@ async fn run() {
         });
     });
 }
+
+// Inspired by floem.
+// This is what i want the final app to look like
+// fn app_view() -> impl IntoView {
+// 	let label = label(move || "Hello");
+// 	div((label)).style(|s| s.background_color(Color::Pink))
+// }
 
 fn render<F>(state: &mut WGPUState, mut f: F)
 where
