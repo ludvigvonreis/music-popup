@@ -1,21 +1,26 @@
-use std::mem::MaybeUninit;
-
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Anchor;
-use wgpu::{BindGroupLayout, RenderPass};
+use wgpu::{Color, RenderPass};
 
 mod backend;
+mod style;
 mod ui;
+mod view;
+mod views;
 use crate::{
     backend::{state::WGPUState, window::Window},
+    style::Decorators,
     ui::{RenderUi, image::Image},
+    view::{IntoView, View},
+    views::{div, label, text},
 };
-
 
 fn main() {
     pollster::block_on(run());
 }
 
 async fn run() {
+    app_view().into_view().print();
+
     let mut window = Window::new(
         "Music Widget",
         (350, 100),
@@ -43,7 +48,7 @@ async fn run() {
     let mut ui_renderer = RenderUi::new(Box::new(img));
 
     ui_renderer.create_buffers(&wgpu_state);
-	ui_renderer.create_bind_groups(&wgpu_state);
+    ui_renderer.create_bind_groups(&wgpu_state);
     ui_renderer.create_pipelines(&wgpu_state);
 
     window.event_loop(|| {
@@ -53,12 +58,19 @@ async fn run() {
     });
 }
 
-// Inspired by floem.
-// This is what i want the final app to look like
-// fn app_view() -> impl IntoView {
-// 	let label = label(move || "Hello");
-// 	div((label)).style(|s| s.background_color(Color::Pink))
-// }
+fn app_view() -> impl IntoView {
+    let label1 = label(move || "Hello World");
+    let label2 = label(move || "My name is");
+    let label3 = label(move || "What?");
+    let label4 = label(move || "Who?");
+
+    div((
+		label1.style(|mut s| s.background(Color::GREEN)), 
+		label2,
+		div((label3, label4)),
+		div((text("hello"), text("Chicka chicka")))
+	))
+}
 
 fn render<F>(state: &mut WGPUState, mut f: F)
 where

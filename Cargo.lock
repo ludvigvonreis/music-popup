@@ -772,6 +772,7 @@ dependencies = [
  "glyphon",
  "pollster",
  "raw-window-handle",
+ "slotmap",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols-wlr",
