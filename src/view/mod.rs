@@ -1,22 +1,24 @@
 pub mod view_id;
 use view_id::*;
-pub mod view_iter;
-pub mod storage;
+
+use crate::backend::render_context::RenderContext;
 pub mod state;
+pub mod storage;
+pub mod view_iter;
 
 pub type AnyView = Box<dyn View>;
 
 pub trait IntoView: Sized {
-	type V: View + 'static;
-	type Intermediate: HasViewId + IntoView<V = Self::V>;
+    type V: View + 'static;
+    type Intermediate: HasViewId + IntoView<V = Self::V>;
 
-	fn into_intermediate(self) -> Self::Intermediate;
+    fn into_intermediate(self) -> Self::Intermediate;
 
-	fn into_view(self) -> Self::V {
-		self.into_intermediate().into_view()
-	}
+    fn into_view(self) -> Self::V {
+        self.into_intermediate().into_view()
+    }
 
-	fn into_any(self) -> AnyView {
+    fn into_any(self) -> AnyView {
         Box::new(self.into_view())
     }
 }
@@ -45,9 +47,14 @@ impl<VW: View + 'static> IntoView for VW {
 }
 
 pub trait View {
-	fn id(&self) -> ViewId;
+    fn id(&self) -> ViewId;
 
-	fn print(&self) {
+    fn print(&self) {}
 
-	}
+    fn paint(&self, ctx: &mut RenderContext) {
+        self.id()
+            .children()
+            .iter()
+            .for_each(|f| f.view().borrow().paint(ctx));
+    }
 }

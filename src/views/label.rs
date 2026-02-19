@@ -1,5 +1,5 @@
-use std::fmt::Display;
 use crate::view::{View, view_id::ViewId};
+use std::fmt::Display;
 
 pub fn label<S: Display + 'static>(label: impl Fn() -> S + 'static) -> Label {
     Label {
@@ -28,4 +28,8 @@ impl View for Label {
     fn print(&self) {
         print!("{:}", self.value);
     }
+
+    // fn paint(&self, ctx: &mut crate::backend::render_context::RenderContext) {
+    //     ctx.text((20.0, 13.0), 13.5);
+    // }
 }

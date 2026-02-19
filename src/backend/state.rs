@@ -1,4 +1,4 @@
-use std::{os::unix::raw::dev_t, ptr::NonNull};
+use std::ptr::NonNull;
 
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
@@ -7,7 +7,10 @@ use wayland_client::{
     Proxy,
     protocol::{wl_display::WlDisplay, wl_surface::WlSurface},
 };
-use wgpu::{BindGroup, BindGroupLayout, Buffer, RenderPipeline, SurfaceTargetUnsafe, VertexBufferLayout, util::DeviceExt};
+use wgpu::{
+    BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, SurfaceTargetUnsafe,
+    VertexBufferLayout, util::DeviceExt,
+};
 
 pub struct WGPUState {
     pub surface: wgpu::Surface<'static>,
@@ -15,7 +18,7 @@ pub struct WGPUState {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub surface_format: wgpu::TextureFormat,
-	pub size: (u32, u32),
+    pub size: (u32, u32),
 }
 
 impl WGPUState {
@@ -80,10 +83,12 @@ impl WGPUState {
             width: size.0,
             height: size.1,
             present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes.iter()
-				.copied()
-				.find(|m| *m == wgpu::CompositeAlphaMode::PreMultiplied)
-				.unwrap_or(surface_caps.alpha_modes[0]),
+            alpha_mode: surface_caps
+                .alpha_modes
+                .iter()
+                .copied()
+                .find(|m| *m == wgpu::CompositeAlphaMode::PreMultiplied)
+                .unwrap_or(surface_caps.alpha_modes[0]),
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
@@ -99,7 +104,7 @@ impl WGPUState {
             queue,
             config,
             surface_format,
-			size
+            size,
         }
     }
 
@@ -108,7 +113,7 @@ impl WGPUState {
         pipeline_label: &str,
         shader_source: &str,
         buffers: &'a [VertexBufferLayout<'a>],
-		bind_group_layouts: &[&BindGroupLayout]
+        bind_group_layouts: &[&BindGroupLayout],
     ) -> RenderPipeline {
         let shader = self
             .device
@@ -196,11 +201,65 @@ impl WGPUState {
         self.queue.write_buffer(buffer, offset, data);
     }
 
-	pub fn create_bind_group_layout(&self, descriptor: &wgpu::BindGroupLayoutDescriptor<'_>) -> BindGroupLayout {
-		self.device.create_bind_group_layout(descriptor)
-	}
-	
-	pub fn create_bind_group(&self, descriptor: &wgpu::BindGroupDescriptor<'_>) -> BindGroup {
-		self.device.create_bind_group(descriptor)
-	}
+    pub fn create_bind_group_layout(
+        &self,
+        descriptor: &wgpu::BindGroupLayoutDescriptor<'_>,
+    ) -> BindGroupLayout {
+        self.device.create_bind_group_layout(descriptor)
+    }
+
+    pub fn create_bind_group(&self, descriptor: &wgpu::BindGroupDescriptor<'_>) -> BindGroup {
+        self.device.create_bind_group(descriptor)
+    }
+
+    pub fn render<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut RenderPass),
+    {
+        // Create texture view
+        let surface_texture = self
+            .surface
+            .get_current_texture()
+            .expect("failed to acquire next swapchain texture");
+        let texture_view = surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor {
+                // Without add_srgb_suffix() the image we will be working with
+                // might not be "gamma correct".
+                format: Some(self.surface_format.add_srgb_suffix()),
+                ..Default::default()
+            });
+
+        let color: wgpu::Color = wgpu::Color::WHITE;
+
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        // Create the renderpass which will clear the screen.
+        let mut renderpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &texture_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(color),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+
+        // If you wanted to call any drawing commands, they would go here.
+
+        f(&mut renderpass);
+
+        // End the renderpass.
+        drop(renderpass);
+
+        // Submit the command in the queue to execute
+        self.queue.submit([encoder.finish()]);
+        surface_texture.present();
+    }
 }

@@ -24,7 +24,6 @@ pub struct Window {
     pub redraw: bool,
 
     size: (u32, u32),
-	scaling_ratio: f32,
     title: String,
 }
 /* ---------- Registry handling ---------- */
@@ -165,7 +164,6 @@ impl Window {
             configured: false,
             redraw: false,
             size,
-			scaling_ratio: (size.0 / size.1) as f32,
             title: title.to_owned(),
         };
 

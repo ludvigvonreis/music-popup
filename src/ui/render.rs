@@ -1,3 +1,4 @@
+use crate::types::Vertex;
 use wgpu::{BindGroup, BindGroupLayout};
 
 use crate::backend::state::WGPUState;
@@ -18,12 +19,6 @@ impl UiRenderQueue {
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 2],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct Uniforms {
     viewport: [f32; 2], // width, height (physical pixels)
     _padding: [f32; 2], // required padding
@@ -31,8 +26,8 @@ struct Uniforms {
 
 #[derive(Default)]
 struct BindGroupContext {
-	uniforms_group: Option<BindGroup>,
-	uniforms_layout: Option<BindGroupLayout>,
+    uniforms_group: Option<BindGroup>,
+    uniforms_layout: Option<BindGroupLayout>,
 }
 
 #[repr(C)]
@@ -66,7 +61,7 @@ impl QuadInstance {
 }
 
 struct QuadBuffers {
-    vertex_buffer: wgpu::Buffer, // static quad geometry
+    vertex_buffer: wgpu::Buffer, // static quad geometry.commands
     index_buffer: wgpu::Buffer,  // static quad indices
 
     instance_buffer: wgpu::Buffer, // per-widget instance data
@@ -103,7 +98,7 @@ impl RenderUi {
 
     pub fn create_buffers(&mut self, state: &WGPUState) {
         const VERTICES: &[Vertex] = &[
-			Vertex {
+            Vertex {
                 position: [-1.0, -1.0],
             },
             Vertex {
@@ -183,8 +178,8 @@ impl RenderUi {
             }],
         });
 
-		self.bind_group_context.uniforms_layout = Some(uniform_bind_group_layout);
-		self.bind_group_context.uniforms_group = Some(uniform_bind_group);
+        self.bind_group_context.uniforms_layout = Some(uniform_bind_group_layout);
+        self.bind_group_context.uniforms_group = Some(uniform_bind_group);
     }
 
     pub fn create_pipelines(&mut self, state: &WGPUState) {
@@ -269,24 +264,25 @@ impl RenderUi {
     pub fn render(&mut self, state: &WGPUState, pass: &mut wgpu::RenderPass) {
         self.update_instance_buffers(&state);
 
-        if let (Some(quad_pipeline), Some(quad_buffers), Some(bind_group)) =
-            (self.quad_pipeline.as_ref(), self.quad_buffers.as_ref(), self.bind_group_context.uniforms_group.as_ref())
-        {
+        if let (Some(quad_pipeline), Some(quad_buffers), Some(bind_group)) = (
+            self.quad_pipeline.as_ref(),
+            self.quad_buffers.as_ref(),
+            self.bind_group_context.uniforms_group.as_ref(),
+        ) {
             pass.set_pipeline(&quad_pipeline);
 
             pass.set_vertex_buffer(0, quad_buffers.vertex_buffer.slice(..));
             pass.set_vertex_buffer(1, quad_buffers.instance_buffer.slice(..));
 
-			pass.set_index_buffer(
-				quad_buffers.index_buffer.slice(..),
-				wgpu::IndexFormat::Uint16,
-			);
-			
-			// Add uniform bind group
-			pass.set_bind_group(0, bind_group, &[]);
-	
-			pass.draw_indexed(0..6, 0, 0..self.num_quads as u32);
-        }
+            pass.set_index_buffer(
+                quad_buffers.index_buffer.slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
 
+            // Add uniform bind group
+            pass.set_bind_group(0, bind_group, &[]);
+
+            pass.draw_indexed(0..6, 0, 0..self.num_quads as u32);
+        }
     }
 }

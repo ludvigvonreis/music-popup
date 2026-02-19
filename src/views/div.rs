@@ -1,6 +1,9 @@
-use slotmap::Key;
+use wgpu::Color;
 
-use crate::view::{View, view_id::ViewId, view_iter::IntoViewIter};
+use crate::{
+    types::Vec2,
+    view::{View, view_id::ViewId, view_iter::IntoViewIter},
+};
 
 pub fn div(children: impl IntoViewIter) -> Div {
     Div::new(children)
@@ -13,10 +16,8 @@ pub struct Div {
 impl Div {
     pub fn new(children: impl IntoViewIter) -> Self {
         let id = ViewId::new();
-		id.set_children_iter(children.into_view_iter());
-        Div {
-            id,
-        }
+        id.set_children_iter(children.into_view_iter());
+        Div { id }
     }
 }
 
@@ -25,16 +26,19 @@ impl View for Div {
         self.id
     }
 
-    fn print(&self) {
-		let children = self.id.children();
-		print!("\n");
-		println!("{:?}", self.id);
-		print!("    ");
-		for child in children {
-			print!("'");
-			child.view().borrow().print();
-			print!("' ");
-		}
-		print!("\n");
+    fn paint(&self, ctx: &mut crate::backend::render_context::RenderContext) {
+        let style = self.id.state().borrow().style.clone();
+
+        ctx.rect(
+            style.position,
+            style.size,
+            style.border_radius,
+            style.background_color,
+        );
+
+        self.id()
+            .children()
+            .iter()
+            .for_each(|f| f.view().borrow().paint(ctx));
     }
 }
