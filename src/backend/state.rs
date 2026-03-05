@@ -76,7 +76,9 @@ impl WGPUState {
             .iter()
             .find(|f| f.is_srgb())
             .copied()
-            .unwrap_or(surface_caps.formats[0]);
+            //.find(|f| f.is_srgb())
+            .unwrap();
+        //.unwrap_or(wgpu::TextureFormat::Bgra8UnormSrgb);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -155,7 +157,7 @@ impl WGPUState {
                             },
                             alpha: wgpu::BlendComponent {
                                 src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::Zero,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                                 operation: wgpu::BlendOperation::Add,
                             },
                         }),
@@ -226,11 +228,11 @@ impl WGPUState {
             .create_view(&wgpu::TextureViewDescriptor {
                 // Without add_srgb_suffix() the image we will be working with
                 // might not be "gamma correct".
-                format: Some(self.surface_format.add_srgb_suffix()),
+                //format: Some(self.surface_format.add_srgb_suffix()),
                 ..Default::default()
             });
 
-        let color: wgpu::Color = wgpu::Color::WHITE;
+        let color: wgpu::Color = wgpu::Color::TRANSPARENT;
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
         // Create the renderpass which will clear the screen.

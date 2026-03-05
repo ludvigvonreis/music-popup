@@ -1,8 +1,8 @@
 use crate::{
-    types::Vec2,
+    color::Color,
+    vector::Vec2,
     view::{HasViewId, IntoView},
 };
-use wgpu::Color;
 
 #[derive(Clone, Copy)]
 pub struct Style {

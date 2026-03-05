@@ -1,21 +1,22 @@
-use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Anchor;
-use wgpu::{Color, RenderPass};
-
 mod backend;
+mod color;
 mod style;
 mod types;
 mod ui;
+mod vector;
 mod view;
 mod views;
 
 use crate::{
-    backend::{render::Renderer, render_context::RenderContext, state::WGPUState, window::Window},
+    backend::{render::Renderer, state::WGPUState, window::Window},
+    color::Color,
     style::Decorators,
-    types::{ObjectData, Vec2},
-    ui::{RenderUi, image::Image},
-    view::{IntoView, View},
-    views::{div, label, text},
+    vector::Vec2,
+    view::{IntoView, view_iter::IntoViewIter},
+    views::{div, label},
 };
+
+use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Anchor;
 
 fn main() {
     pollster::block_on(run());
@@ -68,26 +69,19 @@ fn app_view() -> impl IntoView {
     let label3 = label(move || "What?");
     let label4 = label(move || "Who?");
 
-    div((div((label1,)).style(|s| {
-        s.background(Color {
-            r: 1.0,
-            g: 0.0,
-            b: 0.0,
-            a: 1.0,
-        })
-        .border_radius(5.0)
-        .position(Vec2 { x: 85.0, y: 0.0 })
-        .size(Vec2 { x: 170.0, y: 90.0 })
-    }),))
-    .style(|s| {
-        s.background(Color {
-            r: 0.368,
-            g: 0.611,
-            b: 0.145,
-            a: 1.0,
-        })
-        .border_radius(10.0)
-        .position(Vec2 { x: -85.0, y: 0.0 })
-        .size(Vec2 { x: 170.0, y: 90.0 })
+    transparent_rect(div(label1).style(|s| {
+        s.background(Color::from_hex("#000000ff"))
+            .border_radius(10.0)
+            .position(Vec2::new(-10.0, 0.0))
+            .size(Vec2::new(300.0, 50.0))
+    }))
+}
+
+fn transparent_rect(children: impl IntoViewIter) -> impl IntoView {
+    div(children).style(|s| {
+        s.background(Color::from_hex("#21273344"))
+            .border_radius(10.0)
+            .position(Vec2::new(0.0, 0.0))
+            .size(Vec2::new(340.0, 90.0))
     })
 }

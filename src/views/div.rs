@@ -1,9 +1,4 @@
-use wgpu::Color;
-
-use crate::{
-    types::Vec2,
-    view::{View, view_id::ViewId, view_iter::IntoViewIter},
-};
+use crate::view::{View, view_id::ViewId, view_iter::IntoViewIter};
 
 pub fn div(children: impl IntoViewIter) -> Div {
     Div::new(children)

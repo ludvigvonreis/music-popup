@@ -21,9 +21,3 @@ pub struct ObjectData {
     pub radius: f32,        // 4 bytes
     pub _padding: [f32; 3], // pad to 16-byte alignment
 }
-
-#[derive(Copy, Clone, Debug)]
-pub struct Vec2 {
-    pub x: f32,
-    pub y: f32,
-}

@@ -1,9 +1,4 @@
-use wgpu::Color;
-
-use crate::{
-    backend::render_storage::PipelineType,
-    types::{Vec2, Vertex},
-};
+use crate::{backend::render_storage::PipelineType, color::Color, types::Vertex, vector::Vec2};
 use std::ops::Range;
 
 pub struct RenderContext {
@@ -22,8 +17,6 @@ pub struct DrawList {
 pub struct Instance {
     pub pos: Vec2,
     pub size: Vec2,
-    // TODO: Make custom color struct, dont depend on wgpu.
-    // They even say you shouldnt.
     pub color: Color,
     pub radius: f32,
 }

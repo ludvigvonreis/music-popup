@@ -71,5 +71,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = in.color.xyz;
     let alpha = smoothstep(0.0, 1.0, -d); // negative inside
 
-	return vec4<f32>(color, alpha);
+	return vec4<f32>(color * in.color.a, min(in.color.a, alpha));
 }

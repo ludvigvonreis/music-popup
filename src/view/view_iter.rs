@@ -1,7 +1,7 @@
 use crate::view::{AnyView, IntoView};
 
 pub trait IntoViewIter {
-	fn into_view_iter(self) -> impl Iterator<Item = AnyView>;
+    fn into_view_iter(self) -> impl Iterator<Item = AnyView>;
 }
 
 impl IntoViewIter for () {
@@ -13,6 +13,12 @@ impl IntoViewIter for () {
 impl<V: IntoView, const N: usize> IntoViewIter for [V; N] {
     fn into_view_iter(self) -> impl Iterator<Item = AnyView> {
         self.into_iter().map(|v| v.into_any())
+    }
+}
+
+impl<V: IntoView> IntoViewIter for V {
+    fn into_view_iter(self) -> impl Iterator<Item = AnyView> {
+        std::iter::once(self.into_any())
     }
 }
 
