@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
-use wgpu::{BindGroup, BindGroupLayout, Buffer, RenderPipeline};
+use glyphon::{
+    Cache, FontSystem, Resolution, SwashCache, TextArea, TextAtlas, TextRenderer, Viewport,
+};
+use wgpu::{BindGroup, BindGroupLayout, Buffer, MultisampleState, RenderPipeline};
 
 use crate::backend::state::WGPUState;
-use crate::types::{ObjectData, Uniforms, Vertex};
+use crate::types::{RectInstance, Uniforms, Vertex};
+use crate::view;
 
 // Magic number.
 // How many instances can be rendered at the same time.
@@ -27,55 +31,118 @@ pub struct BindGroupState {
 }
 
 pub struct RenderStorage {
-    // Regular geometry
-    pub vertex_buffer: Buffer,
-    pub index_buffer: Buffer,
+    // Quad buffers
+    pub unit_quad_vbuf: Buffer,
+    pub unit_quad_ibuf: Buffer,
+
     pub object_buffer: Buffer,
     pub bind_groups: HashMap<BindGroupType, BindGroupState>,
     pipelines: HashMap<PipelineType, RenderPipeline>,
     // Text
+    pub font_system: FontSystem,
+    pub swash_cache: SwashCache,
+    pub atlas: TextAtlas,
+    pub text_renderer: TextRenderer,
+    pub viewport: Viewport,
 }
 
 impl RenderStorage {
     pub fn new(state: &WGPUState) -> Self {
-        let (vertex_buffer, index_buffer, object_buffer) = RenderStorage::create_buffers(&state);
+        let (unit_quad_vbuf, unit_quad_ibuf, object_buffer) = RenderStorage::create_buffers(&state);
         let bind_groups = RenderStorage::create_bind_groups(&state, &object_buffer);
         let pipelines = RenderStorage::create_pipelines(&state, &bind_groups);
 
+        let font_system = FontSystem::new();
+        let swash_cache = SwashCache::new();
+        let cache = Cache::new(&state.device);
+        let mut viewport = Viewport::new(&state.device, &cache);
+        viewport.update(
+            &state.queue,
+            Resolution {
+                width: state.size.0,
+                height: state.size.1,
+            },
+        );
+        let mut atlas = TextAtlas::new(
+            &state.device,
+            &state.queue,
+            &cache,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+        );
+        let text_renderer =
+            TextRenderer::new(&mut atlas, &state.device, MultisampleState::default(), None);
+
         Self {
-            vertex_buffer,
-            index_buffer,
+            unit_quad_vbuf,
+            unit_quad_ibuf,
             pipelines,
             bind_groups: bind_groups,
             object_buffer,
+            swash_cache,
+            font_system,
+            atlas,
+            text_renderer,
+            viewport,
         }
     }
 
-    fn create_buffers(state: &WGPUState) -> (Buffer, Buffer, Buffer) {
-        let capacity = 512;
+    pub fn prepare_text_renderer(
+        &mut self,
+        queue: &wgpu::Queue,
+        device: &wgpu::Device,
+        text_areas: Vec<TextArea>,
+    ) {
+        self.text_renderer
+            .prepare(
+                device,
+                queue,
+                &mut self.font_system,
+                &mut self.atlas,
+                &self.viewport,
+                text_areas,
+                &mut self.swash_cache,
+            )
+            .expect("Failed to prepare text");
+    }
 
-        let vertex_buffer = state.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Vertex Buffer"),
-            size: (capacity * std::mem::size_of::<Vertex>()) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+    fn create_buffers(state: &WGPUState) -> (Buffer, Buffer, Buffer) {
+        const VERTICES: &[Vertex] = &[
+            Vertex {
+                position: [-1.0, -1.0],
+            },
+            Vertex {
+                position: [1.0, -1.0],
+            },
+            Vertex {
+                position: [1.0, 1.0],
+            },
+            Vertex {
+                position: [-1.0, 1.0],
+            },
+        ];
+
+        const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
+
+        let quad_vbuf = state.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Quad Vertex Buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let index_buffer = state.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Index Buffer"),
-            size: (capacity * std::mem::size_of::<u16>()) as u64,
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+        let quad_ibuf = state.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Quad Vertex Buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
         });
 
         let object_buffer = state.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Object Buffer"),
-            size: (OBJECT_CAPACITY * std::mem::size_of::<ObjectData>()) as u64,
+            size: (OBJECT_CAPACITY * std::mem::size_of::<RectInstance>()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        (vertex_buffer, index_buffer, object_buffer)
+        (quad_vbuf, quad_ibuf, object_buffer)
     }
 
     fn create_pipelines(

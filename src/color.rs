@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 #[derive(Clone, Copy, Debug)]
 pub struct Color {
     pub r: f32,
@@ -90,5 +88,16 @@ impl Color {
             b: b as f32 / 255.0,
             a: a as f32 / 255.0,
         }
+    }
+}
+
+impl Into<glyphon::Color> for Color {
+    fn into(self) -> glyphon::Color {
+        glyphon::Color::rgba(
+            (self.r * 255.0) as u8,
+            (self.g * 255.0) as u8,
+            (self.b * 255.0) as u8,
+            (self.a * 255.0) as u8,
+        )
     }
 }

@@ -76,9 +76,8 @@ impl WGPUState {
             .iter()
             .find(|f| f.is_srgb())
             .copied()
-            //.find(|f| f.is_srgb())
             .unwrap();
-        //.unwrap_or(wgpu::TextureFormat::Bgra8UnormSrgb);
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,

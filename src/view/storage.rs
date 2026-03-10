@@ -9,11 +9,11 @@ thread_local! {
 pub struct ViewStorage {
     pub(crate) view_ids: SlotMap<ViewId, ()>,
     pub(crate) views: SecondaryMap<ViewId, Rc<RefCell<AnyView>>>,
-	pub(crate) children: SecondaryMap<ViewId, Vec<ViewId>>,
-	pub(crate) parent: SecondaryMap<ViewId, Option<ViewId>>,
+    pub(crate) children: SecondaryMap<ViewId, Vec<ViewId>>,
+    pub(crate) parent: SecondaryMap<ViewId, Option<ViewId>>,
 
     pub(crate) states: SecondaryMap<ViewId, Rc<RefCell<ViewState>>>,
-	pub(crate) stale_view: Rc<RefCell<AnyView>>,
+    pub(crate) stale_view: Rc<RefCell<AnyView>>,
 }
 
 impl Default for ViewStorage {
@@ -29,8 +29,8 @@ impl ViewStorage {
         Self {
             view_ids,
             views: Default::default(),
-			children: Default::default(),
-			parent: Default::default(),
+            children: Default::default(),
+            parent: Default::default(),
             states: Default::default(),
             stale_view: Rc::new(RefCell::new(
                 crate::views::Empty {

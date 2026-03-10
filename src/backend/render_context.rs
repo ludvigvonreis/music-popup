@@ -1,41 +1,53 @@
-use crate::{backend::render_storage::PipelineType, color::Color, types::Vertex, vector::Vec2};
-use std::ops::Range;
+use glyphon::TextArea;
+
+use crate::{
+    backend::render_storage::{PipelineType, RenderStorage},
+    types::{RectInstance, TextEntry, Vertex},
+};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    ops::Range,
+    rc::Rc,
+};
 
 pub struct RenderContext {
     draw_list: DrawList,
+    render_storage: Rc<RefCell<RenderStorage>>,
 }
 
-#[derive(Debug)]
+//#[derive(Debug)]
 pub struct DrawList {
     pub commands: Vec<DrawCommand>,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
-    pub instanced_data: Vec<Instance>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Instance {
-    pub pos: Vec2,
-    pub size: Vec2,
-    pub color: Color,
-    pub radius: f32,
+    pub rect_instances: Vec<RectInstance>,
+    pub text_instances: Vec<Rc<TextEntry>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct DrawCommand {
+    pub kind: DrawKind,
     pub pipeline: PipelineType,
-    pub vertex_range: Range<u64>,
-    pub index_range: Range<u64>,
-    //pub instance_range: Range<u64>,
-    pub texture_index: u32,
+    pub clip: Option<ClipRect>, // scissor rect; None = no clipping
 }
 
-impl Default for RenderContext {
-    fn default() -> Self {
-        Self {
-            draw_list: Default::default(),
-        }
-    }
+#[derive(Debug, Clone)]
+pub enum DrawKind {
+    Rects { instance_range: Range<u32> },
+    Glyphs,
+    // Mesh {
+    //     vertex_range: Range<u32>,
+    //     index_range: Range<u32>,
+    //     texture_id: u32, // for image quads
+    // },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClipRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Default for DrawList {
@@ -44,68 +56,63 @@ impl Default for DrawList {
             commands: Default::default(),
             vertices: Default::default(),
             indices: Default::default(),
-            instanced_data: Default::default(),
+            rect_instances: Default::default(),
+            text_instances: Default::default(),
         }
     }
 }
 
 impl RenderContext {
+    pub fn new(render_storage: Rc<RefCell<RenderStorage>>) -> RenderContext {
+        RenderContext {
+            draw_list: Default::default(),
+            render_storage: render_storage,
+        }
+    }
+
     pub fn draw_list(&self) -> &DrawList {
         &self.draw_list
     }
 
-    pub fn rect(&mut self, pos: Vec2, size: Vec2, radius: f32, color: Color) {
-        const VERTICES: &[Vertex] = &[
-            Vertex {
-                position: [-1.0, -1.0],
-            },
-            Vertex {
-                position: [1.0, -1.0],
-            },
-            Vertex {
-                position: [1.0, 1.0],
-            },
-            Vertex {
-                position: [-1.0, 1.0],
-            },
-        ];
+    pub fn storage(&self) -> Ref<RenderStorage> {
+        self.render_storage.borrow()
+    }
 
-        const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
+    pub fn storage_mut(&self) -> RefMut<RenderStorage> {
+        self.render_storage.borrow_mut()
+    }
 
-        let base_vertices: u64 =
-            u64::try_from(self.draw_list.vertices.len()).expect("length does not fit in u64");
-        let base_indices: u64 =
-            u64::try_from(self.draw_list.indices.len()).expect("length does not fit in u64");
+    pub fn rect(&mut self, instance: RectInstance, clip: Option<ClipRect>) {
+        let start = self.draw_list.rect_instances.len() as u32;
+        self.draw_list.rect_instances.push(instance);
+        let end = self.draw_list.rect_instances.len() as u32;
 
-        for vertex in VERTICES {
-            self.draw_list.vertices.push(*vertex);
+        // Merge into previous command if same kind and same clip
+        if let Some(cmd) = self.draw_list.commands.last_mut() {
+            if let DrawKind::Rects { instance_range } = &mut cmd.kind {
+                if cmd.clip == clip && instance_range.end == start {
+                    instance_range.end = end;
+                    return;
+                }
+            }
         }
-
-        for index in INDICES {
-            self.draw_list.indices.push(*index);
-        }
-
-        let vertices_len: u64 = u64::try_from(VERTICES.len()).expect("length does not fit in u64");
-        let indices_len: u64 = u64::try_from(INDICES.len()).expect("length does not fit in u64");
 
         self.draw_list.commands.push(DrawCommand {
+            kind: DrawKind::Rects {
+                instance_range: start..end,
+            },
             pipeline: PipelineType::Rect,
-            vertex_range: (base_vertices * 8..(base_vertices + vertices_len) * 8),
-            index_range: (base_indices * 2..(base_indices + indices_len) * 2),
-            //instance_range: (base_instances * 48)..((base_instances + 1) * 48),
-            texture_index: 0,
-        });
-
-        self.draw_list.instanced_data.push(Instance {
-            pos,
-            size,
-            color,
-            radius,
+            clip: clip,
         });
     }
 
-    // TODO: Implement this really with glyphon.
-    pub fn text(&mut self) {
-        todo!()
+    pub fn text(&mut self, text_entry: Rc<TextEntry>) {
+        self.draw_list.text_instances.push(text_entry);
+
+        self.draw_list.commands.push(DrawCommand {
+            kind: DrawKind::Glyphs,
+            pipeline: PipelineType::Text,
+            clip: None,
+        });
     }
 }

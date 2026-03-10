@@ -16,6 +16,7 @@ use crate::{
     views::{div, label},
 };
 
+use glyphon::Weight;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Anchor;
 
 fn main() {
@@ -39,38 +40,21 @@ async fn run() {
         WGPUState::new(&display, &surface, window.size()).await
     };
 
-    let mut renderer = Renderer::new(wgpu_state);
-
-    // let img = Image {
-    //     color: [0.368, 0.611, 0.145, 1.0], // Red
-    //     children: vec![/* Box::new(img2)*/],
-    //     position: [0.0, 0.0],
-    //     size: [340.0, 90.0],
-    //     texture_index: 0,
-    // };
-
-    // let mut ui_renderer = RenderUi::new(Box::new(img));
-
-    // ui_renderer.create_buffers(&wgpu_state);
-    // ui_renderer.create_bind_groups(&wgpu_state);
-    // ui_renderer.create_pipelines(&wgpu_state);
+    let mut renderer = Renderer::new(wgpu_state, app_view());
 
     window.event_loop(|| {
-        renderer.render_frame(app_view());
-        // render(&mut wgpu_state, |state, pass| {
-        //     ui_renderer.render(&state, pass);
-        // });
+        renderer.layout_frame();
+        renderer.render_frame();
     });
 }
 
 fn app_view() -> impl IntoView {
-    let label1 = label(move || "Hello World");
-    let label2 = label(move || "My name is");
-    let label3 = label(move || "What?");
-    let label4 = label(move || "Who?");
+    let label1 = label(move || "Hello World\nShalom").style(|s| s.position(Vec2::new(30.0, 30.0)));
+    let label2 = label(move || "What is your name...")
+        .style(|s| s.weight(Weight::MEDIUM).position(Vec2::new(130.0, 30.0)));
 
-    transparent_rect(div(label1).style(|s| {
-        s.background(Color::from_hex("#000000ff"))
+    transparent_rect(div((label1, label2)).style(|s| {
+        s.background_color(Color::from_hex("#ff0000aa"))
             .border_radius(10.0)
             .position(Vec2::new(-10.0, 0.0))
             .size(Vec2::new(300.0, 50.0))
@@ -79,7 +63,7 @@ fn app_view() -> impl IntoView {
 
 fn transparent_rect(children: impl IntoViewIter) -> impl IntoView {
     div(children).style(|s| {
-        s.background(Color::from_hex("#21273344"))
+        s.background_color(Color::from_hex("#21273344"))
             .border_radius(10.0)
             .position(Vec2::new(0.0, 0.0))
             .size(Vec2::new(340.0, 90.0))

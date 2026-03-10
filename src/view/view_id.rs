@@ -1,7 +1,4 @@
-use std::{
-    cell::{Ref, RefCell},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use slotmap::new_key_type;
 
@@ -55,12 +52,12 @@ impl ViewId {
         });
     }
 
-	pub fn set_children_vec(&self, children: Vec<impl IntoView>) {
+    pub fn set_children_vec(&self, children: Vec<impl IntoView>) {
         self.set_children_iter(children.into_iter().map(|c| c.into_any()));
     }
 
-	pub fn set_children_iter(&self, children: impl Iterator<Item = Box<dyn View>>) {
-       	VIEW_STORAGE.with_borrow_mut(|s| {
+    pub fn set_children_iter(&self, children: impl Iterator<Item = Box<dyn View>>) {
+        VIEW_STORAGE.with_borrow_mut(|s| {
             let mut children_ids = Vec::new();
             for child_view in children {
                 let child_view_id = child_view.id();
@@ -73,7 +70,7 @@ impl ViewId {
         });
     }
 
-	pub fn children(&self) -> Vec<ViewId> {
+    pub fn children(&self) -> Vec<ViewId> {
         VIEW_STORAGE.with_borrow(|s| s.children.get(*self).cloned().unwrap_or_default())
     }
 }

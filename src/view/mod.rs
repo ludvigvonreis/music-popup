@@ -1,7 +1,7 @@
 pub mod view_id;
 use view_id::*;
 
-use crate::backend::render_context::RenderContext;
+use crate::backend::{layout_context::LayoutContext, render_context::RenderContext};
 pub mod state;
 pub mod storage;
 pub mod view_iter;
@@ -49,7 +49,12 @@ impl<VW: View + 'static> IntoView for VW {
 pub trait View {
     fn id(&self) -> ViewId;
 
-    fn print(&self) {}
+    fn layout(&mut self, ctx: &mut LayoutContext) {
+        self.id()
+            .children()
+            .iter()
+            .for_each(|f| f.view().borrow_mut().layout(ctx));
+    }
 
     fn paint(&self, ctx: &mut RenderContext) {
         self.id()
