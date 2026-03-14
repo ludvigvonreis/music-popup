@@ -49,6 +49,10 @@ impl<VW: View + 'static> IntoView for VW {
 pub trait View {
     fn id(&self) -> ViewId;
 
+    fn debug_name(&self) -> std::borrow::Cow<'static, str> {
+        core::any::type_name::<Self>().into()
+    }
+
     fn layout(&mut self, ctx: &mut LayoutContext) {
         self.id()
             .children()

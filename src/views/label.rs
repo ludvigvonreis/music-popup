@@ -12,12 +12,9 @@ pub fn label<S: Into<String>>(label: impl Fn() -> S + 'static) -> Label {
     Label::new(label())
 }
 
-// pub fn text<S: Display>(label: S) -> Label {
-//     Label {
-//         id: ViewId::new(),
-//         value: label.to_string(),
-//     }
-// }
+pub fn text<S: Into<String>>(label: S) -> Label {
+    Label::new(label)
+}
 
 pub struct Label {
     id: ViewId,
@@ -32,7 +29,6 @@ impl View for Label {
 
     fn layout(&mut self, ctx: &mut LayoutContext) {
         if self.text_entry.is_none() {
-            println!("layout text");
             let style = self.id.state().borrow().style.clone();
             let font_system = &mut ctx.storage_mut().font_system;
 

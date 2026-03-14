@@ -24,8 +24,8 @@ struct Vertex {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
-	@location(1) uv: vec2<f32>,
-	@location(2) size: vec2<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) size: vec2<f32>,
     @location(3) radius: f32,
 };
 
@@ -35,20 +35,24 @@ fn vs_main(vertex: Vertex) -> VertexOutput {
 
     let instance = objects[vertex.instanceIndex];
 
-	let scale: vec2<f32> = (instance.size / u.viewport);
+    let scale: vec2<f32> = (instance.size / u.viewport);
 
-	// Apply size to the vertex shape
-	let scaled_vertex = vertex.position * scale;
+    // Apply size to the vertex shape
+    let scaled_vertex = vertex.position * scale;
 
-	// Now add instance offset
-	let final_pos = scaled_vertex + (instance.position / (u.viewport * 0.5));
-	out.clip_position = vec4<f32>(final_pos, 0.0, 1.0);
+    // Now add instance offset
+    let clip_pos = vec2<f32>(
+        (instance.position.x + instance.size.x * 0.5) / (u.viewport.x * 0.5) - 1.0,
+        1.0 - (instance.position.y + instance.size.y * 0.5) / (u.viewport.y * 0.5)
+    );
+    let final_pos = scaled_vertex + clip_pos;
+    out.clip_position = vec4<f32>(final_pos, 0.0, 1.0);
 
-	out.uv = vertex.position * instance.size;
+    out.uv = vertex.position * instance.size;
 
     out.color = instance.color;
-	out.size = instance.size;
-	out.radius = instance.radius;
+    out.size = instance.size;
+    out.radius = instance.radius;
 
     return out;
 }
@@ -60,7 +64,7 @@ fn sdRoundedBox2D(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-	let radius = in.radius;
+    let radius = in.radius;
     //let radius = 10.0;
     let halfSize = in.size / 2;
 
@@ -69,7 +73,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // simple anti-aliased color
     var color = in.color.xyz;
-    let alpha = smoothstep(0.0, 1.0, -d); // negative inside
-
-	return vec4<f32>(color * in.color.a, min(in.color.a, alpha));
+    let alpha = smoothstep(0.0, 1.0, -d) * in.color.a;
+    return vec4<f32>(color * alpha, alpha);
 }

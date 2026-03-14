@@ -150,7 +150,7 @@ impl WGPUState {
                         format: self.config.format,
                         blend: Some(wgpu::BlendState {
                             color: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::SrcAlpha,
+                                src_factor: wgpu::BlendFactor::One, // src is premultiplied
                                 dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                                 operation: wgpu::BlendOperation::Add,
                             },
@@ -231,7 +231,12 @@ impl WGPUState {
                 ..Default::default()
             });
 
-        let color: wgpu::Color = wgpu::Color::TRANSPARENT;
+        let color: wgpu::Color = wgpu::Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 0.0,
+        };
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
         // Create the renderpass which will clear the screen.

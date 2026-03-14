@@ -2,7 +2,6 @@ mod backend;
 mod color;
 mod style;
 mod types;
-mod ui;
 mod vector;
 mod view;
 mod views;
@@ -12,8 +11,8 @@ use crate::{
     color::Color,
     style::Decorators,
     vector::Vec2,
-    view::{IntoView, view_iter::IntoViewIter},
-    views::{div, label},
+    view::{IntoView, View, view_iter::IntoViewIter},
+    views::{div, label, text},
 };
 
 use glyphon::Weight;
@@ -26,7 +25,7 @@ fn main() {
 async fn run() {
     let mut window = Window::new(
         "Music Widget",
-        (350, 100),
+        (380, 80),
         (540 - (150), 960 - (350 / 2), 0, 0),
         Anchor::Top | Anchor::Right,
     );
@@ -40,7 +39,7 @@ async fn run() {
         WGPUState::new(&display, &surface, window.size()).await
     };
 
-    let mut renderer = Renderer::new(wgpu_state, app_view());
+    let mut renderer = Renderer::new(wgpu_state, music_status());
 
     window.event_loop(|| {
         renderer.layout_frame();
@@ -48,24 +47,57 @@ async fn run() {
     });
 }
 
-fn app_view() -> impl IntoView {
-    let label1 = label(move || "Hello World\nShalom").style(|s| s.position(Vec2::new(30.0, 30.0)));
-    let label2 = label(move || "What is your name...")
-        .style(|s| s.weight(Weight::MEDIUM).position(Vec2::new(130.0, 30.0)));
+fn track_info() -> impl IntoView {
+    let title = text("Virtual Insanity").style(|s| {
+        s.text_color(Color::from_hex("#d4d4d4"))
+            .font_size(17.0)
+            .weight(Weight::SEMIBOLD)
+            .position(Vec2::new(62.0, 10.0))
+    });
+    let artist = text("Jamiroquai").style(|s| {
+        s.text_color(Color::from_hex("#d4d4d4"))
+            .font_size(13.0)
+            .weight(Weight::NORMAL)
+            .position(Vec2::new(62.0, 30.0))
+    });
+    div((title, artist)).style(|s| s.size(Vec2::new(360.0, 36.0)))
+}
 
-    transparent_rect(div((label1, label2)).style(|s| {
-        s.background_color(Color::from_hex("#ff0000aa"))
-            .border_radius(10.0)
-            .position(Vec2::new(-10.0, 0.0))
-            .size(Vec2::new(300.0, 50.0))
-    }))
+fn album_art() -> impl IntoView {
+    div(()).style(|s| {
+        s.background_color(Color::from_hex("#262626"))
+            .border_radius(4.0)
+            .position(Vec2::new(8.0, 8.0))
+            .size(Vec2::new(44.0, 44.0))
+    })
+}
+
+fn progress_bar() -> impl IntoView {
+    div((
+        div(()).style(|s| {
+            s.background_color(Color::from_hex("#262626"))
+                .border_radius(4.0)
+                .position(Vec2::new(8.0, 60.0))
+                .size(Vec2::new(364.0, 5.0))
+        }),
+        div(()).style(|s| {
+            s.background_color(Color::from_hex("#0a0a0a"))
+                .border_radius(4.0)
+                .position(Vec2::new(8.0, 60.0))
+                .size(Vec2::new(184.0, 5.0))
+        }),
+    ))
+}
+
+fn music_status() -> impl IntoView {
+    transparent_rect((album_art(), track_info(), progress_bar()))
 }
 
 fn transparent_rect(children: impl IntoViewIter) -> impl IntoView {
     div(children).style(|s| {
-        s.background_color(Color::from_hex("#21273344"))
-            .border_radius(10.0)
+        s.border_radius(10.0)
             .position(Vec2::new(0.0, 0.0))
-            .size(Vec2::new(340.0, 90.0))
+            .size(Vec2::new(380.0, 80.0))
+            .background_color(Color::from_hex("#17171744"))
     })
 }

@@ -41,7 +41,7 @@ pub struct Style {
 impl Style {
     pub fn new() -> Self {
         Style {
-            background_color: Color::WHITE,
+            background_color: Color::from_hex("#00000000"),
             position: Vec2 { x: 0.0, y: 0.0 },
             size: Vec2 { x: 0.0, y: 0.0 },
             border_radius: 0.0,
@@ -51,7 +51,7 @@ impl Style {
             weight: glyphon::Weight::NORMAL,
             text_style: glyphon::Style::Normal,
             text_color: Color::WHITE,
-            font_family: "FiraCode Nerd Font".to_owned(),
+            font_family: "Roboto".to_owned(),
         }
     }
 }
