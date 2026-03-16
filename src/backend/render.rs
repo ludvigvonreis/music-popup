@@ -1,4 +1,4 @@
-use glyphon::{TextArea, TextBounds, Viewport};
+use glyphon::{TextArea, TextBounds};
 
 use crate::{
     backend::{
@@ -7,7 +7,6 @@ use crate::{
         render_storage::RenderStorage,
         state::WGPUState,
     },
-    types::RectInstance,
     view::{IntoView, View},
 };
 use std::{cell::RefCell, rc::Rc};

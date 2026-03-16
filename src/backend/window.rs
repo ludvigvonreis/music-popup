@@ -1,5 +1,5 @@
 use wayland_client::{
-    Connection, Dispatch, EventQueue, Proxy, QueueHandle,
+    Connection, Dispatch, EventQueue, QueueHandle,
     protocol::{
         wl_callback, wl_compositor::WlCompositor, wl_display::WlDisplay, wl_registry::WlRegistry,
         wl_surface::WlSurface,
@@ -206,21 +206,21 @@ impl Window {
     }
 
     pub fn resize(&self, size: (u32, u32)) -> &Self {
-		if let Some(layer_surface) = &self.layer_surface {
-			layer_surface.set_size(size.0, size.1);
+        if let Some(layer_surface) = &self.layer_surface {
+            layer_surface.set_size(size.0, size.1);
 
-			self.commit_surface();
-		}
+            self.commit_surface();
+        }
         self
     }
 
-	fn commit_surface(&self) -> &Self {
-		if let Some(surface) = &self.surface {
-			surface.commit();
-		}
+    fn commit_surface(&self) -> &Self {
+        if let Some(surface) = &self.surface {
+            surface.commit();
+        }
 
-		self
-	}
+        self
+    }
 
     pub fn event_loop<F>(&mut self, mut f: F)
     where
@@ -230,13 +230,13 @@ impl Window {
             let mut event_queue = self.event_queue.take().expect("event_queue missing");
 
             event_queue.blocking_dispatch(self).unwrap();
-			self.event_queue = Some(event_queue);
+            self.event_queue = Some(event_queue);
 
             if self.configured && self.redraw {
                 let qh = self.qh.as_ref().unwrap();
                 let surface = self.surface.as_ref().unwrap();
 
-				f();
+                f();
 
                 surface.frame(qh, ());
                 surface.commit();

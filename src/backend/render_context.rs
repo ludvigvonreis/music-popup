@@ -1,5 +1,3 @@
-use glyphon::TextArea;
-
 use crate::{
     backend::render_storage::{PipelineType, RenderStorage},
     types::{RectInstance, TextEntry, Vertex},
@@ -74,11 +72,11 @@ impl RenderContext {
         &self.draw_list
     }
 
-    pub fn storage(&self) -> Ref<RenderStorage> {
+    pub fn storage(&self) -> Ref<'_, RenderStorage> {
         self.render_storage.borrow()
     }
 
-    pub fn storage_mut(&self) -> RefMut<RenderStorage> {
+    pub fn storage_mut(&self) -> RefMut<'_, RenderStorage> {
         self.render_storage.borrow_mut()
     }
 

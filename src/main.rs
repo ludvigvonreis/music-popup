@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod backend;
 mod color;
 mod style;
@@ -11,8 +12,8 @@ use crate::{
     color::Color,
     style::Decorators,
     vector::Vec2,
-    view::{IntoView, View, view_iter::IntoViewIter},
-    views::{div, label, text},
+    view::{IntoView, view_iter::IntoViewIter},
+    views::{div, text},
 };
 
 use glyphon::Weight;
@@ -24,7 +25,7 @@ fn main() {
 
 async fn run() {
     let mut window = Window::new(
-        "Music Widget",
+        "music-popup",
         (380, 80),
         (540 - (150), 960 - (350 / 2), 0, 0),
         Anchor::Top | Anchor::Right,
@@ -46,16 +47,15 @@ async fn run() {
         renderer.render_frame();
     });
 }
-
 fn track_info() -> impl IntoView {
     let title = text("Virtual Insanity").style(|s| {
-        s.text_color(Color::from_hex("#d4d4d4"))
+        s.text_color(Color::from_hex("#d9d7ce")) // foreground
             .font_size(17.0)
             .weight(Weight::SEMIBOLD)
             .position(Vec2::new(62.0, 10.0))
     });
     let artist = text("Jamiroquai").style(|s| {
-        s.text_color(Color::from_hex("#d4d4d4"))
+        s.text_color(Color::from_hex("#b5b3ac")) // color8 (muted)
             .font_size(13.0)
             .weight(Weight::NORMAL)
             .position(Vec2::new(62.0, 30.0))
@@ -65,7 +65,7 @@ fn track_info() -> impl IntoView {
 
 fn album_art() -> impl IntoView {
     div(()).style(|s| {
-        s.background_color(Color::from_hex("#262626"))
+        s.background_color(Color::from_hex("#343f4c")) // selection_background
             .border_radius(4.0)
             .position(Vec2::new(8.0, 8.0))
             .size(Vec2::new(44.0, 44.0))
@@ -75,13 +75,13 @@ fn album_art() -> impl IntoView {
 fn progress_bar() -> impl IntoView {
     div((
         div(()).style(|s| {
-            s.background_color(Color::from_hex("#262626"))
+            s.background_color(Color::from_hex("#343f4c")) // selection_background (track)
                 .border_radius(4.0)
                 .position(Vec2::new(8.0, 60.0))
                 .size(Vec2::new(364.0, 5.0))
         }),
         div(()).style(|s| {
-            s.background_color(Color::from_hex("#0a0a0a"))
+            s.background_color(Color::from_hex("#cfbafa")) // cursor/accent (fill)
                 .border_radius(4.0)
                 .position(Vec2::new(8.0, 60.0))
                 .size(Vec2::new(184.0, 5.0))
@@ -89,15 +89,15 @@ fn progress_bar() -> impl IntoView {
     ))
 }
 
-fn music_status() -> impl IntoView {
-    transparent_rect((album_art(), track_info(), progress_bar()))
-}
-
 fn transparent_rect(children: impl IntoViewIter) -> impl IntoView {
     div(children).style(|s| {
         s.border_radius(10.0)
             .position(Vec2::new(0.0, 0.0))
             .size(Vec2::new(380.0, 80.0))
-            .background_color(Color::from_hex("#17171744"))
+            .background_color(Color::from_hex("#212733cc"))
     })
+}
+
+fn music_status() -> impl IntoView {
+    transparent_rect((album_art(), track_info(), progress_bar()))
 }

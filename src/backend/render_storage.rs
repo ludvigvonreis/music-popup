@@ -7,7 +7,6 @@ use wgpu::{BindGroup, BindGroupLayout, Buffer, MultisampleState, RenderPipeline}
 
 use crate::backend::state::WGPUState;
 use crate::types::{RectInstance, Uniforms, Vertex};
-use crate::view;
 
 // Magic number.
 // How many instances can be rendered at the same time.

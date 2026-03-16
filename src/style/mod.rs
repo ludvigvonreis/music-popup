@@ -1,5 +1,3 @@
-use glyphon::Family;
-
 use crate::{
     color::Color,
     vector::Vec2,
@@ -51,7 +49,7 @@ impl Style {
             weight: glyphon::Weight::NORMAL,
             text_style: glyphon::Style::Normal,
             text_color: Color::WHITE,
-            font_family: "Roboto".to_owned(),
+            font_family: "FiraCode Nerd".to_owned(),
         }
     }
 }

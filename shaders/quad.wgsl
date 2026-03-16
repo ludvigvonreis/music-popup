@@ -62,6 +62,18 @@ fn sdRoundedBox2D(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
     return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - r;
 }
 
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        return c / 12.92;
+    } else {
+        return pow((c + 0.055) / 1.055, 2.4);
+    }
+}
+
+fn srgb_vec_to_linear(c: vec3<f32>) -> vec3<f32> {
+    return vec3(srgb_to_linear(c.x), srgb_to_linear(c.y), srgb_to_linear(c.z));
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let radius = in.radius;
@@ -74,5 +86,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // simple anti-aliased color
     var color = in.color.xyz;
     let alpha = smoothstep(0.0, 1.0, -d) * in.color.a;
-    return vec4<f32>(color * alpha, alpha);
+    let linear = srgb_vec_to_linear(color);
+    return vec4<f32>(linear * alpha, alpha);
 }
