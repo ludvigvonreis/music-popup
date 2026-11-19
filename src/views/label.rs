@@ -1,17 +1,31 @@
-use std::rc::Rc;
+use std::{any::Any, rc::Rc};
 
 use glyphon::{Attrs, Buffer, Family, Metrics};
 
 use crate::{
     backend::{layout_context::LayoutContext, render_context::RenderContext},
+    reactive::create_effect,
     types::TextEntry,
-    view::{View, view_id::ViewId},
+    view::{
+        IntoView, View,
+        update::{StyleChanged, push_update},
+        view_id::ViewId,
+    },
 };
 
-pub fn label<S: Into<String>>(label: impl Fn() -> S + 'static) -> Label {
-    Label::new(label())
+/// Dynamic text. `f` runs in an effect, so signals read inside it keep the
+/// label up to date: `label(move || title.get())`.
+pub fn label<S: Into<String>>(f: impl Fn() -> S + 'static) -> Label {
+    let l = Label::new(String::new());
+    let id = l.id;
+    create_effect(move || {
+        let s: String = f().into();
+        push_update(id, Box::new(s));
+    });
+    l
 }
 
+/// Static text.
 pub fn text<S: Into<String>>(label: S) -> Label {
     Label::new(label)
 }
@@ -25,6 +39,22 @@ pub struct Label {
 impl View for Label {
     fn id(&self) -> ViewId {
         self.id
+    }
+
+    fn update(&mut self, state: Box<dyn Any>) {
+        let state = match state.downcast::<String>() {
+            Ok(new_text) => {
+                if *new_text != self.text {
+                    self.text = *new_text;
+                    self.text_entry = None; // rebuilt by `layout`
+                }
+                return;
+            }
+            Err(other) => other,
+        };
+        if state.is::<StyleChanged>() {
+            self.text_entry = None; // font, size, color or position changed
+        }
     }
 
     fn layout(&mut self, ctx: &mut LayoutContext) {
@@ -66,12 +96,28 @@ impl View for Label {
 
 impl Label {
     pub fn new(text: impl Into<String>) -> Self {
-        let id = ViewId::new();
-        let text = text.into();
         Self {
-            id,
-            text,
+            id: ViewId::new(),
+            text: text.into(),
             text_entry: None,
         }
+    }
+}
+
+impl IntoView for String {
+    type V = Label;
+    type Intermediate = Label;
+
+    fn into_intermediate(self) -> Label {
+        Label::new(self)
+    }
+}
+
+impl IntoView for &str {
+    type V = Label;
+    type Intermediate = Label;
+
+    fn into_intermediate(self) -> Label {
+        Label::new(self)
     }
 }

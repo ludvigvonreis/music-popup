@@ -51,6 +51,22 @@ impl Color {
         Color { r, b, g, a }
     }
 
+    // pub fn from_hex2(hex: u32) -> Color {
+    //     let hex: u32 = 0xaaff00ff;
+
+    //     let r = hex >> (8 * 4);
+    //     let b = hex >> (8 * 3);
+    //     let g = hex >> (8 * 2);
+    //     let a = hex >> (8 * 1);
+
+    //     Color {
+    //         r: r as f32 / 255.0,
+    //         g: g as f32 / 255.0,
+    //         b: b as f32 / 255.0,
+    //         a: a as f32 / 255.0,
+    //     }
+    // }
+
     /// Parses colors in the format:
     /// #RRGGBB
     /// #RRGGBBAA

@@ -1,3 +1,9 @@
+use std::{
+    io::{Read, Write},
+    os::{fd::AsRawFd, unix::net::UnixStream},
+    sync::Arc,
+    time::Duration,
+};
 use wayland_client::{
     Connection, Dispatch, EventQueue, QueueHandle,
     protocol::{
@@ -9,6 +15,40 @@ use wayland_protocols_wlr::layer_shell::v1::client::{
     zwlr_layer_shell_v1::{Layer, ZwlrLayerShellV1},
     zwlr_layer_surface_v1::{Anchor, ZwlrLayerSurfaceV1},
 };
+
+#[derive(Clone)]
+pub struct Waker {
+    tx: Arc<UnixStream>,
+}
+
+pub struct WakeRx {
+    rx: UnixStream,
+}
+
+pub fn wake_channel() -> std::io::Result<(Waker, WakeRx)> {
+    let (tx, rx) = UnixStream::pair()?;
+    tx.set_nonblocking(true)?;
+    rx.set_nonblocking(true)?;
+    Ok((Waker { tx: Arc::new(tx) }, WakeRx { rx }))
+}
+
+impl Waker {
+    /// Safe to call from any thread.
+    pub fn wake(&self) {
+        let _ = (&*self.tx).write(&[1]);
+    }
+}
+
+impl WakeRx {
+    fn drain(&self) {
+        let mut buf = [0u8; 64];
+        while let Ok(n) = (&self.rx).read(&mut buf) {
+            if n == 0 {
+                break;
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Window {
@@ -222,27 +262,64 @@ impl Window {
         self
     }
 
-    pub fn event_loop<F>(&mut self, mut f: F)
+    pub fn event_loop<T, D>(&mut self, wake: &WakeRx, mut tick: T, mut draw: D)
     where
-        F: FnMut(),
+        T: FnMut() -> Option<Duration>,
+        D: FnMut() -> bool,
     {
+        let mut timeout: Option<Duration> = None;
         loop {
-            let mut event_queue = self.event_queue.take().expect("event_queue missing");
+            self.wait_and_dispatch(wake, timeout);
+            wake.drain();
+            timeout = tick();
 
-            event_queue.blocking_dispatch(self).unwrap();
-            self.event_queue = Some(event_queue);
-
+            // `redraw` is set by the compositor's frame callback / configure.
+            // While idle it stays true, so a signal set by `tick` or by an
+            // input event draws immediately.
             if self.configured && self.redraw {
-                let qh = self.qh.as_ref().unwrap();
-                let surface = self.surface.as_ref().unwrap();
-
-                f();
-
-                surface.frame(qh, ());
-                surface.commit();
-
-                self.redraw = false;
+                if draw() {
+                    let qh = self.qh.as_ref().unwrap();
+                    let surface = self.surface.as_ref().unwrap();
+                    surface.frame(qh, ());
+                    surface.commit();
+                    self.redraw = false;
+                }
             }
         }
+    }
+
+    fn wait_and_dispatch(&mut self, wake: &WakeRx, timeout: Option<Duration>) {
+        let mut queue = self.event_queue.take().expect("event_queue missing");
+
+        queue.dispatch_pending(self).unwrap();
+        let _ = queue.flush();
+
+        if let Some(guard) = queue.prepare_read() {
+            let wl_fd = guard.connection_fd().as_raw_fd();
+            let mut fds = [
+                libc::pollfd {
+                    fd: wl_fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: wake.rx.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            let ms = timeout.map_or(-1, |d| d.as_millis().min(i32::MAX as u128) as i32);
+            // EINTR and timeouts are fine: we just fall through and loop.
+            unsafe { libc::poll(fds.as_mut_ptr(), 2, ms) };
+
+            if fds[0].revents & libc::POLLIN != 0 {
+                let _ = guard.read();
+            } else {
+                drop(guard); // cancel the read; nothing from the compositor
+            }
+            queue.dispatch_pending(self).unwrap();
+        }
+
+        self.event_queue = Some(queue);
     }
 }

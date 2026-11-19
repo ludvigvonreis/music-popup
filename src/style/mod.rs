@@ -1,8 +1,11 @@
 use crate::{
     color::Color,
+    reactive::create_effect,
     vector::Vec2,
+    view::update::{SetStyle, push_update},
     view::{HasViewId, IntoView},
 };
+use std::{cell::RefCell, rc::Rc};
 
 macro_rules! impl_style_setters {
     (
@@ -68,17 +71,31 @@ impl_style_setters! {
         text_color: Color,
     }
 }
-
 pub trait Decorators: IntoView {
-    fn style(self, mut style: impl FnMut(Style) -> Style + 'static) -> Self::Intermediate {
+    /// Adds a style layer. The closure runs inside an effect, so any signal it
+    /// reads re-resolves this view's style (and only this view's).
+    fn style(self, style: impl FnMut(Style) -> Style + 'static) -> Self::Intermediate {
         let intermediate = self.into_intermediate();
         let view_id = intermediate.view_id();
-        let state = view_id.state();
 
-        // Update style to changed value
-        let old_style = state.borrow_mut().style.clone();
-        let new_style = style(old_style);
-        state.borrow_mut().style = new_style;
+        view_id
+            .state()
+            .borrow_mut()
+            .style_layers
+            .push(Rc::new(RefCell::new(style)));
+
+        create_effect(move || {
+            // Clone the layer list out so no RefCell borrow is held while the
+            // user closures run (they may read signals, or even other views).
+            let layers = view_id.state().borrow().style_layers.clone();
+
+            // Resolve from scratch so conditional styles don't stick.
+            let mut resolved = Style::new();
+            for layer in &layers {
+                resolved = (layer.borrow_mut())(resolved);
+            }
+            push_update(view_id, Box::new(SetStyle(resolved)));
+        });
 
         intermediate
     }

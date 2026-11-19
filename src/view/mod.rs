@@ -1,9 +1,12 @@
 pub mod view_id;
+use std::any::Any;
+
 use view_id::*;
 
 use crate::backend::{layout_context::LayoutContext, render_context::RenderContext};
 pub mod state;
 pub mod storage;
+pub mod update;
 pub mod view_iter;
 
 pub type AnyView = Box<dyn View>;
@@ -66,4 +69,6 @@ pub trait View {
             .iter()
             .for_each(|f| f.view().borrow().paint(ctx));
     }
+
+    fn update(&mut self, state: Box<dyn Any>) {}
 }
