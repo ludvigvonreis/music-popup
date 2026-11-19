@@ -1,18 +1,8 @@
 #![allow(dead_code)]
-mod app;
-mod backend;
-mod color;
-mod reactive;
-mod remote;
-mod style;
-mod types;
-mod vector;
-mod view;
-mod views;
-
 use std::{thread, time::Duration};
 
-use crate::{
+use library::{
+    Anchor, Weight,
     app::App,
     color::Color,
     reactive::RwSignal,
@@ -20,11 +10,8 @@ use crate::{
     style::Decorators,
     vector::Vec2,
     view::{IntoView, view_iter::IntoViewIter},
-    views::{div, label, text},
+    views::{div, label},
 };
-
-use glyphon::Weight;
-use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Anchor;
 
 fn main() {
     App::new("music-popup")
