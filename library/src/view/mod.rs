@@ -4,6 +4,7 @@ use std::any::Any;
 use view_id::*;
 
 use crate::backend::{layout_context::LayoutContext, render_context::RenderContext};
+pub mod layout;
 pub mod state;
 pub mod storage;
 pub mod update;
@@ -71,4 +72,13 @@ pub trait View {
     }
 
     fn update(&mut self, state: Box<dyn Any>) {}
+
+    fn measure(
+        &mut self,
+        _ctx: &mut LayoutContext,
+        _known: taffy::Size<Option<f32>>,
+        _available: taffy::Size<taffy::AvailableSpace>,
+    ) -> Option<taffy::Size<f32>> {
+        None
+    }
 }

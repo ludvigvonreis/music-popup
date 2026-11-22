@@ -15,6 +15,10 @@ pub mod window {
     pub use crate::backend::window::bind_visible;
 }
 
+pub mod layout {
+    pub use taffy::{AlignItems, JustifyContent};
+}
+
 // Re-exported so user crates don't need glyphon / wayland-protocols-wlr.
 pub use glyphon::Weight;
 pub use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Anchor;

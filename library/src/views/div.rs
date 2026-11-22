@@ -1,5 +1,6 @@
 use crate::{
-    backend::render_context::ClipRect,
+    backend::render_context::RenderContext,
+    color::Color,
     types::RectInstance,
     view::{View, view_id::ViewId, view_iter::IntoViewIter},
 };
@@ -25,35 +26,31 @@ impl View for Div {
         self.id
     }
 
-    fn paint(&self, ctx: &mut crate::backend::render_context::RenderContext) {
-        let style = self.id.state().borrow().style.clone();
+    fn paint(&self, ctx: &mut RenderContext) {
+        let s = self.id.state().borrow().style.clone();
+        let r = self.id.rect();
 
-        let pos = style.position;
-        let size = style.size;
-        let radius = style.border_radius;
-        let color = style.background_color;
-
-        let instance = RectInstance {
-            position: [pos.x, pos.y],
-            size: [size.x, size.y],
-            color: [
-                color.r as f32,
-                color.g as f32,
-                color.b as f32,
-                color.a as f32,
-            ],
-            radius: radius,
-            _padding: [0.0; 3],
+        let rgba = |c: &Color| [c.r as f32, c.g as f32, c.b as f32, c.a as f32];
+        let (shadow_color, shadow_offset, shadow_blur) = match &s.shadow {
+            Some(sh) => (rgba(&sh.color), [sh.offset.0, sh.offset.1], sh.blur),
+            None => ([0.0; 4], [0.0; 2], 0.0),
         };
 
-        let clip = ClipRect {
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100,
-        };
-
-        ctx.rect(instance, Some(clip));
+        ctx.rect(
+            RectInstance {
+                position: [r.x, r.y],
+                size: [r.w, r.h],
+                color: rgba(&s.background_color),
+                border_color: rgba(&s.border_color),
+                shadow_color,
+                shadow_offset,
+                radius: s.border_radius,
+                border_width: s.border_width,
+                shadow_blur,
+                _padding: [0.0; 3],
+            },
+            None,
+        );
 
         self.id()
             .children()

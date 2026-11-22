@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::{any::Any, sync::Arc};
 
+use crate::backend::layout_context::LayoutContext;
 use crate::{
     backend::render_context::RenderContext,
     reactive::create_effect,
@@ -39,14 +40,43 @@ impl View for RemoteImage {
         }
     }
 
+    fn measure(
+        &mut self,
+        _ctx: &mut LayoutContext,
+        known: taffy::Size<Option<f32>>,
+        _available: taffy::Size<taffy::AvailableSpace>,
+    ) -> Option<taffy::Size<f32>> {
+        let d = self.data.as_ref()?;
+        let (iw, ih) = (d.width as f32, d.height as f32);
+        Some(match (known.width, known.height) {
+            (Some(w), Some(h)) => taffy::Size {
+                width: w,
+                height: h,
+            },
+            (Some(w), None) => taffy::Size {
+                width: w,
+                height: w * ih / iw,
+            },
+            (None, Some(h)) => taffy::Size {
+                width: h * iw / ih,
+                height: h,
+            },
+            (None, None) => taffy::Size {
+                width: iw,
+                height: ih,
+            },
+        })
+    }
+
     fn paint(&self, ctx: &mut RenderContext) {
         let Some(data) = &self.data else { return };
         let style = self.id.state().borrow().style.clone();
+        let r = self.id.rect();
         ctx.image(
             data,
             ImageInstance {
-                position: [style.position.x, style.position.y],
-                size: [style.size.x, style.size.y],
+                position: [r.x, r.y],
+                size: [r.w, r.h],
                 uv_rect: [0.0, 0.0, 1.0, 1.0],
                 tint: [1.0; 4],
                 radius: style.border_radius,

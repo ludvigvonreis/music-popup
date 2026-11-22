@@ -6,6 +6,10 @@ use crate::{
     view::{HasViewId, IntoView},
 };
 use std::{cell::RefCell, rc::Rc};
+use taffy::{
+    AlignItems, Dimension, FlexDirection, JustifyContent, Rect, Size,
+    style_helpers::{length, percent},
+};
 
 macro_rules! impl_style_setters {
     (
@@ -37,6 +41,17 @@ pub struct Style {
     pub text_style: glyphon::Style,
     pub text_color: Color,
     pub font_family: String,
+    pub layout: taffy::Style,
+    pub border_color: Color,
+    pub border_width: f32,
+    pub shadow: Option<Shadow>,
+}
+
+#[derive(Clone)]
+pub struct Shadow {
+    pub offset: (f32, f32),
+    pub blur: f32,
+    pub color: Color,
 }
 
 impl Style {
@@ -53,15 +68,113 @@ impl Style {
             text_style: glyphon::Style::Normal,
             text_color: Color::WHITE,
             font_family: "FiraCode Nerd".to_owned(),
+            layout: taffy::Style::default(),
+            border_color: Color::from_hex("#00000000"),
+            border_width: 0.0,
+            shadow: None,
         }
+    }
+}
+
+impl Style {
+    /// Inset border. Also shrinks the content box, like CSS border-box.
+    pub fn border(mut self, width: f32, color: Color) -> Self {
+        self.border_width = width;
+        self.border_color = color;
+        self.layout.border = Rect {
+            left: length(width),
+            right: length(width),
+            top: length(width),
+            bottom: length(width),
+        };
+        self
+    }
+
+    pub fn box_shadow(mut self, x: f32, y: f32, blur: f32, color: Color) -> Self {
+        self.shadow = Some(Shadow {
+            offset: (x, y),
+            blur,
+            color,
+        });
+        self
+    }
+    pub fn width(mut self, v: Dimension) -> Self {
+        self.layout.size.width = v;
+        self
+    }
+    pub fn height(mut self, v: Dimension) -> Self {
+        self.layout.size.height = v;
+        self
+    }
+    pub fn size(mut self, w: f32, h: f32) -> Self {
+        self.layout.size = Size {
+            width: length(w),
+            height: length(h),
+        };
+        self
+    }
+    pub fn min_width(mut self, v: Dimension) -> Self {
+        self.layout.min_size.width = v;
+        self
+    }
+    pub fn flex_row(mut self) -> Self {
+        self.layout.flex_direction = FlexDirection::Row;
+        self
+    }
+    pub fn flex_column(mut self) -> Self {
+        self.layout.flex_direction = FlexDirection::Column;
+        self
+    }
+    pub fn justify(mut self, v: JustifyContent) -> Self {
+        self.layout.justify_content = Some(v);
+        self
+    }
+    pub fn align(mut self, v: AlignItems) -> Self {
+        self.layout.align_items = Some(v);
+        self
+    }
+    pub fn gap(mut self, v: f32) -> Self {
+        self.layout.gap = Size {
+            width: length(v),
+            height: length(v),
+        };
+        self
+    }
+    pub fn padding(mut self, v: f32) -> Self {
+        self.layout.padding = Rect {
+            left: length(v),
+            right: length(v),
+            top: length(v),
+            bottom: length(v),
+        };
+        self
+    }
+    pub fn margin(mut self, v: f32) -> Self {
+        self.layout.margin = Rect {
+            left: length(v),
+            right: length(v),
+            top: length(v),
+            bottom: length(v),
+        };
+        self
+    }
+    pub fn grow(mut self, v: f32) -> Self {
+        self.layout.flex_grow = v;
+        self
+    }
+    pub fn shrink(mut self, v: f32) -> Self {
+        self.layout.flex_shrink = v;
+        self
+    }
+    pub fn basis(mut self, v: Dimension) -> Self {
+        self.layout.flex_basis = v;
+        self
     }
 }
 
 impl_style_setters! {
     Style {
         background_color: Color,
-        position: Vec2,
-        size: Vec2,
         border_radius: f32,
         font_size: f32,
         line_height: f32,
@@ -69,6 +182,7 @@ impl_style_setters! {
         weight: glyphon::Weight,
         text_style: glyphon::Style,
         text_color: Color,
+        font_family: String,
     }
 }
 pub trait Decorators: IntoView {
@@ -99,6 +213,13 @@ pub trait Decorators: IntoView {
 
         intermediate
     }
+}
+
+pub fn px(v: f32) -> Dimension {
+    length(v)
+}
+pub fn pct(v: f32) -> Dimension {
+    percent(v)
 }
 
 impl<T: IntoView> Decorators for T {}

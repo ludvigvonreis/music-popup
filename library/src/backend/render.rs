@@ -33,7 +33,9 @@ impl Renderer {
 
     pub fn layout_frame(&mut self) {
         let mut ctx = LayoutContext::new(self.storage.clone());
-        self.root_view.layout(&mut ctx);
+        let (w, h) = self.state.size;
+        crate::view::layout::compute(self.root_view.id(), (w as f32, h as f32), &mut ctx);
+        self.root_view.layout(&mut ctx); // post-pass: views read their rects
     }
 
     pub fn render_frame(&mut self) {

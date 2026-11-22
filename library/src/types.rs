@@ -14,14 +14,18 @@ pub struct Uniforms {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct RectInstance {
-    pub position: [f32; 2], // 8 bytes
-    pub size: [f32; 2],     // 8 bytes
-    pub color: [f32; 4],    // 16 bytes
-    //pub texture_index: u32, // 4 bytes
-    pub radius: f32,        // 4 bytes
-    pub _padding: [f32; 3], // pad to 16-byte alignment
+    pub position: [f32; 2],      // 0
+    pub size: [f32; 2],          // 8
+    pub color: [f32; 4],         // 16
+    pub border_color: [f32; 4],  // 32
+    pub shadow_color: [f32; 4],  // 48
+    pub shadow_offset: [f32; 2], // 64
+    pub radius: f32,             // 72
+    pub border_width: f32,       // 76
+    pub shadow_blur: f32,        // 80
+    pub _padding: [f32; 3],      // 84..96
 }
 
 #[derive(Debug, Clone)]
