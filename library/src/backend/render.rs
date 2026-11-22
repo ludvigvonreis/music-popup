@@ -73,6 +73,15 @@ impl Renderer {
                 0,
                 bytemuck::cast_slice(&rect_instances),
             );
+
+            // Image buffers
+            let image_instances = ctx.draw_list().image_instances.clone();
+            storage.ensure_images(&self.state, &ctx.draw_list().image_assets);
+            self.state.write_buffer(
+                &storage.image_instance_buffer.clone(),
+                0,
+                bytemuck::cast_slice(&image_instances),
+            );
         }
         let storage = self.storage.borrow();
 
@@ -86,6 +95,8 @@ impl Renderer {
             .bind_groups
             .get(&BindGroupType::ObjectUniforms)
             .expect("Bind group not set");
+
+        let image_instance_buffer = storage.image_instance_buffer.clone();
 
         let commands = &ctx.draw_list().commands;
         self.state.render(|pass| {
@@ -121,6 +132,21 @@ impl Renderer {
                             .text_renderer
                             .render(&storage.atlas, &storage.viewport, pass)
                             .expect("Failed to render text");
+                    }
+                    DrawKind::Images {
+                        image_id,
+                        instance_range,
+                    } => {
+                        let Some(image_bg) = short_lived_storage.images.get(image_id) else {
+                            continue;
+                        };
+                        pass.set_pipeline(short_lived_storage.get_pipeline(&command.pipeline));
+                        pass.set_bind_group(0, &uniform_buffer.bind_group, &[]);
+                        pass.set_bind_group(1, image_bg, &[]);
+                        pass.set_vertex_buffer(0, unit_quad_vbuf.slice(..));
+                        pass.set_vertex_buffer(1, image_instance_buffer.slice(..));
+                        pass.set_index_buffer(unit_quad_ibuf.slice(..), wgpu::IndexFormat::Uint16);
+                        pass.draw_indexed(0..6, 0, instance_range.clone());
                     }
                 }
             }

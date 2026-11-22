@@ -26,6 +26,7 @@ pub struct App {
     size: (u32, u32),
     margin: (i32, i32, i32, i32),
     anchor: Anchor,
+    output: Option<String>,
 }
 
 impl App {
@@ -35,6 +36,7 @@ impl App {
             size: (300, 100),
             margin: (0, 0, 0, 0),
             anchor: Anchor::empty(),
+            output: None,
         }
     }
 
@@ -54,6 +56,11 @@ impl App {
         self
     }
 
+    pub fn output(mut self, name: impl Into<String>) -> Self {
+        self.output = Some(name.into());
+        self
+    }
+
     /// Blocks until the window closes. `root` runs once, on the main thread,
     /// after the runtime and wake hook exist, so it may create signals and
     /// call `remote_signal` / `remote_events` / `spawn`.
@@ -62,7 +69,13 @@ impl App {
     }
 
     async fn run_async<V: IntoView>(self, root: impl FnOnce() -> V) {
-        let mut window = Window::new(&self.name, self.size, self.margin, self.anchor);
+        let mut window = Window::new(
+            &self.name,
+            self.size,
+            self.margin,
+            self.anchor,
+            self.output.as_deref(),
+        );
 
         let wgpu_state = {
             let (display, surface) = match (&window.display, &window.surface) {

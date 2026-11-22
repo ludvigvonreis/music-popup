@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use glyphon::{
     Cache, FontSystem, Resolution, SwashCache, TextArea, TextAtlas, TextRenderer, Viewport,
@@ -6,16 +7,19 @@ use glyphon::{
 use wgpu::{BindGroup, BindGroupLayout, Buffer, MultisampleState, RenderPipeline};
 
 use crate::backend::state::WGPUState;
+use crate::types::{ImageData, ImageId, ImageInstance};
 use crate::types::{RectInstance, Uniforms, Vertex};
 
 // Magic number.
 // How many instances can be rendered at the same time.
 const OBJECT_CAPACITY: usize = 1024;
+const IMAGE_CAPACITY: usize = 1024;
 
 #[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
 pub enum PipelineType {
     Rect,
     Text,
+    Image,
 }
 
 #[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
@@ -43,13 +47,55 @@ pub struct RenderStorage {
     pub atlas: TextAtlas,
     pub text_renderer: TextRenderer,
     pub viewport: Viewport,
+
+    // Image
+    pub image_instance_buffer: Buffer,
+    image_bind_group_layout: BindGroupLayout,
+    image_sampler: wgpu::Sampler,
+    pub images: HashMap<ImageId, BindGroup>,
 }
 
 impl RenderStorage {
     pub fn new(state: &WGPUState) -> Self {
         let (unit_quad_vbuf, unit_quad_ibuf, object_buffer) = RenderStorage::create_buffers(&state);
         let bind_groups = RenderStorage::create_bind_groups(&state, &object_buffer);
-        let pipelines = RenderStorage::create_pipelines(&state, &bind_groups);
+        let image_bind_group_layout =
+            state
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Image BGL"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                });
+        let image_sampler = state.device.create_sampler(&wgpu::SamplerDescriptor {
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let image_instance_buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Image Instance Buffer"),
+            size: (IMAGE_CAPACITY * std::mem::size_of::<ImageInstance>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let pipelines =
+            RenderStorage::create_pipelines(&state, &bind_groups, &image_bind_group_layout);
 
         let font_system = FontSystem::new();
         let swash_cache = SwashCache::new();
@@ -82,6 +128,10 @@ impl RenderStorage {
             atlas,
             text_renderer,
             viewport,
+            image_instance_buffer,
+            image_bind_group_layout,
+            image_sampler,
+            images: Default::default(),
         }
     }
 
@@ -147,13 +197,49 @@ impl RenderStorage {
     fn create_pipelines(
         state: &WGPUState,
         bind_groups: &HashMap<BindGroupType, BindGroupState>,
+        image_layout: &BindGroupLayout,
     ) -> HashMap<PipelineType, RenderPipeline> {
         let mut pipeline_hashmap: HashMap<PipelineType, RenderPipeline> = Default::default();
 
         let quad_pipeline = RenderStorage::create_quad_pipeline(state, &bind_groups);
         pipeline_hashmap.insert(PipelineType::Rect, quad_pipeline);
+        pipeline_hashmap.insert(
+            PipelineType::Image,
+            RenderStorage::create_image_pipeline(state, bind_groups, image_layout),
+        );
 
         pipeline_hashmap
+    }
+
+    fn create_image_pipeline(
+        state: &WGPUState,
+        bind_groups: &HashMap<BindGroupType, BindGroupState>,
+        image_layout: &BindGroupLayout,
+    ) -> RenderPipeline {
+        let quad_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![0 => Float32x2],
+        };
+        let instance_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<ImageInstance>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &wgpu::vertex_attr_array![
+                1 => Float32x2, 2 => Float32x2, 3 => Float32x4, 4 => Float32x4, 5 => Float32
+            ],
+        };
+        state.create_pipeline(
+            "Image Pipeline",
+            include_str!("../../shaders/image.wgsl"),
+            &[quad_layout, instance_layout],
+            &[
+                &bind_groups
+                    .get(&BindGroupType::GlobalUniforms)
+                    .expect("GLOBAL")
+                    .bind_group_layout,
+                image_layout, // group 1 in this pipeline
+            ],
+        )
     }
 
     fn create_quad_pipeline(
@@ -291,5 +377,62 @@ impl RenderStorage {
         self.pipelines
             .get(pipeline_type)
             .expect("Piplelines are not initialized")
+    }
+
+    pub fn ensure_images(&mut self, state: &WGPUState, images: &[Rc<ImageData>]) {
+        for img in images {
+            if self.images.contains_key(&img.id) {
+                continue;
+            }
+
+            let size = wgpu::Extent3d {
+                width: img.width,
+                height: img.height,
+                depth_or_array_layers: 1,
+            };
+            let texture = state.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Image Texture"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            state.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &img.rgba,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * img.width),
+                    rows_per_image: Some(img.height),
+                },
+                size,
+            );
+            let view = texture.create_view(&Default::default());
+            let bind_group = state.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Image Bind Group"),
+                layout: &self.image_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.image_sampler),
+                    },
+                ],
+            });
+            self.images.insert(img.id, bind_group);
+            self.images
+                .retain(|id, _| images.iter().any(|i| i.id == *id));
+        }
     }
 }

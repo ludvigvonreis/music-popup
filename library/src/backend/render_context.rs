@@ -1,6 +1,6 @@
 use crate::{
     backend::render_storage::{PipelineType, RenderStorage},
-    types::{RectInstance, TextEntry, Vertex},
+    types::{ImageData, ImageId, ImageInstance, RectInstance, TextEntry, Vertex},
 };
 use std::{
     cell::{Ref, RefCell, RefMut},
@@ -20,6 +20,8 @@ pub struct DrawList {
     pub indices: Vec<u16>,
     pub rect_instances: Vec<RectInstance>,
     pub text_instances: Vec<Rc<TextEntry>>,
+    pub image_instances: Vec<ImageInstance>,
+    pub image_assets: Vec<Rc<ImageData>>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,13 +33,14 @@ pub struct DrawCommand {
 
 #[derive(Debug, Clone)]
 pub enum DrawKind {
-    Rects { instance_range: Range<u32> },
+    Rects {
+        instance_range: Range<u32>,
+    },
     Glyphs,
-    // Mesh {
-    //     vertex_range: Range<u32>,
-    //     index_range: Range<u32>,
-    //     texture_id: u32, // for image quads
-    // },
+    Images {
+        image_id: ImageId,
+        instance_range: Range<u32>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +59,8 @@ impl Default for DrawList {
             indices: Default::default(),
             rect_instances: Default::default(),
             text_instances: Default::default(),
+            image_instances: Default::default(),
+            image_assets: Default::default(),
         }
     }
 }
@@ -111,6 +116,43 @@ impl RenderContext {
             kind: DrawKind::Glyphs,
             pipeline: PipelineType::Text,
             clip: None,
+        });
+    }
+
+    pub fn image(
+        &mut self,
+        image: &Rc<ImageData>,
+        instance: ImageInstance,
+        clip: Option<ClipRect>,
+    ) {
+        if !self.draw_list.image_assets.iter().any(|a| a.id == image.id) {
+            self.draw_list.image_assets.push(image.clone());
+        }
+
+        let start = self.draw_list.image_instances.len() as u32;
+        self.draw_list.image_instances.push(instance);
+        let end = start + 1;
+
+        if let Some(cmd) = self.draw_list.commands.last_mut() {
+            if let DrawKind::Images {
+                image_id,
+                instance_range,
+            } = &mut cmd.kind
+            {
+                if *image_id == image.id && cmd.clip == clip && instance_range.end == start {
+                    instance_range.end = end;
+                    return;
+                }
+            }
+        }
+
+        self.draw_list.commands.push(DrawCommand {
+            kind: DrawKind::Images {
+                image_id: image.id,
+                instance_range: start..end,
+            },
+            pipeline: PipelineType::Image,
+            clip,
         });
     }
 }

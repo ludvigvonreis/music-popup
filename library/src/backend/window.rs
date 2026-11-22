@@ -1,13 +1,20 @@
+use crate::reactive::RwSignal;
 use std::{
+    cell::RefCell,
     io::{Read, Write},
     os::{fd::AsRawFd, unix::net::UnixStream},
     sync::Arc,
     time::Duration,
 };
+
 use wayland_client::{
     Connection, Dispatch, EventQueue, QueueHandle,
     protocol::{
-        wl_callback, wl_compositor::WlCompositor, wl_display::WlDisplay, wl_registry::WlRegistry,
+        wl_callback,
+        wl_compositor::WlCompositor,
+        wl_display::WlDisplay,
+        wl_output::{self, WlOutput},
+        wl_registry::WlRegistry,
         wl_surface::WlSurface,
     },
 };
@@ -15,6 +22,12 @@ use wayland_protocols_wlr::layer_shell::v1::client::{
     zwlr_layer_shell_v1::{Layer, ZwlrLayerShellV1},
     zwlr_layer_surface_v1::{Anchor, ZwlrLayerSurfaceV1},
 };
+
+#[derive(Debug)]
+struct OutputInfo {
+    output: WlOutput,
+    name: Option<String>,
+}
 
 #[derive(Clone)]
 pub struct Waker {
@@ -59,12 +72,16 @@ pub struct Window {
     pub display: Option<WlDisplay>,
     pub event_queue: Option<EventQueue<Self>>,
     pub qh: Option<QueueHandle<Self>>,
+    outputs: Vec<OutputInfo>,
 
     pub configured: bool,
     pub redraw: bool,
 
     size: (u32, u32),
     title: String,
+    anchor: Anchor,
+    margins: (i32, i32, i32, i32),
+    visible: bool,
 }
 /* ---------- Registry handling ---------- */
 
@@ -90,12 +107,36 @@ impl Dispatch<WlRegistry, ()> for Window {
                         registry.bind::<WlCompositor, _, _>(name, version.min(4), qh, ());
                     state.compositor = Some(compositor);
                 }
+                "wl_output" => {
+                    // The name event needs wl_output v4.
+                    let output = registry.bind::<WlOutput, _, _>(name, version.min(4), qh, ());
+                    state.outputs.push(OutputInfo { output, name: None });
+                }
                 "zwlr_layer_shell_v1" => {
                     let shell =
                         registry.bind::<ZwlrLayerShellV1, _, _>(name, version.min(4), qh, ());
                     state.layer_shell = Some(shell);
                 }
                 _ => {}
+            }
+        }
+    }
+}
+
+/* ---------- Ouput events ---------- */
+
+impl Dispatch<WlOutput, ()> for Window {
+    fn event(
+        state: &mut Self,
+        output: &WlOutput,
+        event: wl_output::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wl_output::Event::Name { name } = event {
+            if let Some(o) = state.outputs.iter_mut().find(|o| &o.output == output) {
+                o.name = Some(name);
             }
         }
     }
@@ -192,6 +233,7 @@ impl Window {
         size: (u32, u32),
         margins: (i32, i32, i32, i32),
         anchor: Anchor,
+        output: Option<&str>, // <- the missing parameter
     ) -> Self {
         let mut state = Self {
             compositor: None,
@@ -205,6 +247,10 @@ impl Window {
             redraw: false,
             size,
             title: title.to_owned(),
+            margins,
+            anchor,
+            visible: true,
+            outputs: Vec::new(),
         };
 
         let conn = Connection::connect_to_env().unwrap();
@@ -216,18 +262,38 @@ impl Window {
 
         let _registry = display.get_registry(&qh, ());
 
-        // Roundtrip to gather globals
+        // 1st roundtrip: globals arrive, we bind wl_output etc.
         event_queue.roundtrip(&mut state).unwrap();
-        state.event_queue = Some(event_queue);
+        // 2nd roundtrip: the bound wl_outputs send their events (names).
+        event_queue.roundtrip(&mut state).unwrap();
 
+        // Only borrow from `state` after the roundtrips (they need &mut state).
         let compositor = state.compositor.as_ref().unwrap();
         let layer_shell = state.layer_shell.as_ref().unwrap();
 
         let surface = compositor.create_surface(&qh, ());
-        state.surface = Some(surface.clone());
+
+        let target = output.and_then(|want| {
+            let found = state
+                .outputs
+                .iter()
+                .find(|o| o.name.as_deref() == Some(want))
+                .map(|o| &o.output);
+            if found.is_none() {
+                let have: Vec<_> = state
+                    .outputs
+                    .iter()
+                    .filter_map(|o| o.name.as_deref())
+                    .collect();
+                eprintln!(
+                    "output {want:?} not found, available: {have:?}; letting compositor choose"
+                );
+            }
+            found
+        });
 
         let layer_surface =
-            layer_shell.get_layer_surface(&surface, None, Layer::Overlay, title.into(), &qh, ());
+            layer_shell.get_layer_surface(&surface, target, Layer::Overlay, title.into(), &qh, ());
 
         layer_surface.set_anchor(anchor);
         layer_surface.set_margin(margins.0, margins.1, margins.2, margins.3);
@@ -236,7 +302,10 @@ impl Window {
 
         surface.commit();
 
+        state.surface = Some(surface);
+        state.layer_surface = Some(layer_surface);
         state.qh = Some(qh);
+        state.event_queue = Some(event_queue); // moved in last
 
         state
     }
@@ -262,6 +331,40 @@ impl Window {
         self
     }
 
+    fn set_visible(&mut self, visible: bool) {
+        if visible == self.visible {
+            return;
+        }
+        self.visible = visible;
+        // Gates draw() (and so any wgpu present) until the compositor
+        // has configured us again.
+        self.configured = false;
+        self.redraw = false;
+
+        let (Some(surface), Some(ls)) = (&self.surface, &self.layer_surface) else {
+            return;
+        };
+        if visible {
+            ls.set_anchor(self.anchor);
+            ls.set_margin(
+                self.margins.0,
+                self.margins.1,
+                self.margins.2,
+                self.margins.3,
+            );
+            ls.set_exclusive_zone(-1);
+            ls.set_size(self.size.0, self.size.1);
+            // Commit with no buffer: the compositor answers with a configure,
+            // your existing handler acks it and sets redraw, and the next
+            // draw() maps the surface.
+            surface.commit();
+        } else {
+            // Null buffer + commit = unmapped.
+            surface.attach(None, 0, 0);
+            surface.commit();
+        }
+    }
+
     pub fn event_loop<T, D>(&mut self, wake: &WakeRx, mut tick: T, mut draw: D)
     where
         T: FnMut() -> Option<Duration>,
@@ -271,7 +374,11 @@ impl Window {
         loop {
             self.wait_and_dispatch(wake, timeout);
             wake.drain();
+
             timeout = tick();
+            if let Some(v) = requested_visibility() {
+                self.set_visible(v);
+            }
 
             // `redraw` is set by the compositor's frame callback / configure.
             // While idle it stays true, so a signal set by `tick` or by an
@@ -322,4 +429,17 @@ impl Window {
 
         self.event_queue = Some(queue);
     }
+}
+
+thread_local! {
+    static VISIBLE_SOURCE: RefCell<Option<Box<dyn Fn() -> bool>>> = RefCell::new(None);
+}
+
+/// Call from a component. The window shows/hides itself to follow `visible`.
+pub fn bind_visible(visible: RwSignal<bool>) {
+    VISIBLE_SOURCE.with(|s| *s.borrow_mut() = Some(Box::new(move || visible.get())));
+}
+
+fn requested_visibility() -> Option<bool> {
+    VISIBLE_SOURCE.with(|s| s.borrow().as_ref().map(|f| f()))
 }
