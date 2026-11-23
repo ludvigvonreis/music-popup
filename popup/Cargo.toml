@@ -8,3 +8,4 @@ library = { path = "../library" }
 mpris = "2.1.0"
 percent-encoding = "2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+rustfft = "6"

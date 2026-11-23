@@ -5,6 +5,7 @@ use std::{
 };
 
 use library::{
+    color::Color,
     reactive::RwSignal,
     remote::{RemoteSender, remote_signal, spawn},
     types::RawImage,
@@ -14,7 +15,7 @@ use mpris::{PlaybackStatus, PlayerFinder};
 const AUTO_HIDE: Option<Duration> = None;
 const ART_PX: u32 = 192;
 const BAR_WIDTH: f32 = 150.0;
-const TITLE_MAX: usize = 64;
+const TITLE_MAX: usize = 32;
 const SUB_MAX: usize = 21;
 const POLL_MS: u32 = 100;
 
@@ -27,6 +28,8 @@ pub struct Player {
     pub playing: RwSignal<bool>,
     pub visible: RwSignal<bool>,
     pub art: RwSignal<Option<Arc<RawImage>>>,
+    pub levels: RwSignal<Vec<u32>>,
+    pub levels_color: RwSignal<Color>,
 }
 
 impl Player {
@@ -38,6 +41,10 @@ impl Player {
         let (playing, playing_tx) = remote_signal(false);
         let (visible, visible_tx) = remote_signal(AUTO_HIDE.is_none());
         let (art, art_tx) = remote_signal::<Option<Arc<RawImage>>>(None);
+        let (levels, levels_tx) = remote_signal::<Vec<u32>>(vec![0; crate::audio::BARS]);
+        let (levels_color, levels_color_tx) = remote_signal(Color::WHITE);
+
+        spawn(move || crate::audio::run(levels_tx));
 
         spawn(move || {
             let mut feed = Feed {
@@ -48,6 +55,7 @@ impl Player {
                 visible: visible_tx,
                 art: art_tx,
                 album: album_tx,
+                levels_color: levels_color_tx,
                 last: Last {
                     visible: AUTO_HIDE.is_none(),
                     ..Default::default()
@@ -64,6 +72,8 @@ impl Player {
             visible,
             art,
             album,
+            levels,
+            levels_color,
         }
     }
 }
@@ -81,6 +91,7 @@ pub struct Last {
     pub visible: bool,
     pub bar_px: i32,
     pub art_url: String,
+    pub levels_color: Color,
 }
 
 pub struct Feed {
@@ -91,6 +102,7 @@ pub struct Feed {
     pub playing: RemoteSender<bool>,
     pub visible: RemoteSender<bool>,
     pub art: RemoteSender<Option<Arc<RawImage>>>,
+    pub levels_color: RemoteSender<Color>,
     pub last: Last,
 }
 
@@ -136,8 +148,16 @@ impl Feed {
             // Remember the URL even on failure so a bad URL isn't retried every poll.
             self.last.art_url = art_url.to_string();
             let img = Self::load_art(art_url).map(Arc::new);
+
+            if let Some(image) = &img {
+                if let Some(color) = Self::average_color(image) {
+                    self.levels_color.send(color).map_err(|_| ())?;
+                }
+            }
+
             self.art.send(img).map_err(|_| ())?;
         }
+
         // Content first, visibility last: no flash of stale info on show.
         self.set_visible(true)
     }
@@ -171,6 +191,42 @@ impl Feed {
             width: img.width(),
             height: img.height(),
             rgba: img.into_raw(),
+        })
+    }
+
+    pub fn average_color(image: &Arc<RawImage>) -> Option<Color> {
+        let mut r = 0.0_f64;
+        let mut g = 0.0_f64;
+        let mut b = 0.0_f64;
+        let mut total_weight = 0.0_f64;
+
+        for pixel in image.rgba.chunks_exact(4) {
+            let pr = pixel[0] as f64 / 255.0;
+            let pg = pixel[1] as f64 / 255.0;
+            let pb = pixel[2] as f64 / 255.0;
+
+            // Perceived brightness
+            let brightness = 0.2126 * pr + 0.7152 * pg + 0.0722 * pb;
+
+            // Brighter pixels receive exponentially more weight
+            let weight = brightness.powf(2.0);
+
+            r += pr * weight;
+            g += pg * weight;
+            b += pb * weight;
+
+            total_weight += weight;
+        }
+
+        if total_weight == 0.0 {
+            return None;
+        }
+
+        Some(Color {
+            r: (r / total_weight) as f32,
+            g: (g / total_weight) as f32,
+            b: (b / total_weight) as f32,
+            a: 1.0,
         })
     }
 

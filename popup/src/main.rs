@@ -1,4 +1,7 @@
 #![allow(dead_code)]
+mod audio;
+mod player;
+mod visualizer;
 
 use library::{
     Anchor, Weight,
@@ -10,8 +13,9 @@ use library::{
     views::{div, label, remote_image},
     window,
 };
-mod player;
-use player::Player;
+
+use crate::player::Player;
+use crate::visualizer::visualizer;
 
 const FONT: &str = "Inter";
 const OUTER_BG: &str = "#1b1d1e";
@@ -20,10 +24,11 @@ const RIM: &str = "#ffffff1c";
 const ART_BACKGROUND: &str = "#2a2c2d";
 const TEXT: &str = "#ffffff";
 const SUB: &str = "#a9abac";
-const ARTIST: &str = "#c4c6c7";
+const ARTIST: &str = "#fafafa";
 const TRACK: &str = "#343637";
 const FILL: &str = "#e8e8e8";
 const FILL_PAUSED: &str = "#8a8c8d";
+const VISUALIZER: &str = "#D6B58C";
 
 fn main() {
     App::new("music-popup")
@@ -42,6 +47,7 @@ fn music_status() -> impl IntoView {
     let player = Player::connect();
     window::bind_visible(player.visible);
 
+    // Back to the plain card: art on the left, text column on the right.
     card((album_art(player), track_info(player)))
 }
 
@@ -68,6 +74,12 @@ fn album_art(p: Player) -> impl IntoView {
 }
 
 fn track_info(p: Player) -> impl IntoView {
+    let bars = visualizer(audio::BARS, move || p.levels.get()).style(move |s| {
+        s.absolute_inset(6.0)
+            .border_radius(10.0)
+            .background_color(p.levels_color.get())
+    });
+
     let title = label(move || p.title.get()).style(|s| {
         s.text_color(Color::from_hex(TEXT))
             .font_family(FONT.to_string())
@@ -77,17 +89,17 @@ fn track_info(p: Player) -> impl IntoView {
     let album = label(move || p.album.get()).style(|s| {
         s.text_color(Color::from_hex(SUB))
             .font_family(FONT.to_string())
-            .font_size(11.0)
+            .font_size(12.0)
             .weight(Weight::NORMAL)
     });
     let artist = label(move || p.artist.get()).style(|s| {
         s.text_color(Color::from_hex(ARTIST))
             .font_family(FONT.to_string())
-            .font_size(11.0)
+            .font_size(12.0)
             .weight(Weight::SEMIBOLD)
     });
 
-    div((title, album, artist, progress_bar(p))).style(|s| {
+    div((bars, title, album, artist, progress_bar(p))).style(|s| {
         s.flex_column()
             .align(AlignItems::Center)
             .justify(JustifyContent::Center)
@@ -95,6 +107,7 @@ fn track_info(p: Player) -> impl IntoView {
             .basis(px(0.0))
             .grow(1.0)
             .min_width(px(0.0))
+            .clip()
     })
 }
 

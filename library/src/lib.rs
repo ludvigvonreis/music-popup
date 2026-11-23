@@ -38,3 +38,10 @@ pub mod prelude {
         window,
     };
 }
+
+pub mod view_prelude {
+    pub use crate::backend::{layout_context::LayoutContext, render_context::RenderContext};
+    pub use crate::color::Color;
+    pub use crate::types::*;
+    pub use crate::view::{View, view_id::ViewId};
+}

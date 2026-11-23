@@ -3,7 +3,7 @@ use glyphon::{TextArea, TextBounds};
 use crate::{
     backend::{
         layout_context::LayoutContext,
-        render_context::{DrawKind, RenderContext},
+        render_context::{ClipRect, DrawCommand, DrawKind, RenderContext},
         render_storage::RenderStorage,
         state::WGPUState,
     },
@@ -45,20 +45,30 @@ impl Renderer {
 
         // Update instance data.
         let rect_instances = ctx.draw_list().rect_instances.clone();
-        let text_areas: Vec<TextArea> = ctx
-            .draw_list()
+        let (vw, vh) = self.state.size;
+        let dl = ctx.draw_list();
+        let text_areas: Vec<TextArea> = dl
             .text_instances
             .iter()
-            .map(|e| TextArea {
+            .zip(&dl.text_clips)
+            .map(|(e, clip)| TextArea {
                 buffer: &e.buffer,
                 left: e.x,
                 top: e.y,
                 scale: 1.0,
-                bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: 9999,
-                    bottom: 9999,
+                bounds: match clip {
+                    Some(c) => TextBounds {
+                        left: c.x as i32,
+                        top: c.y as i32,
+                        right: (c.x + c.width) as i32,
+                        bottom: (c.y + c.height) as i32,
+                    },
+                    None => TextBounds {
+                        left: 0,
+                        top: 0,
+                        right: vw as i32,
+                        bottom: vh as i32,
+                    },
                 },
                 default_color: e.color.into(),
                 custom_glyphs: &[],
@@ -101,9 +111,34 @@ impl Renderer {
         let image_instance_buffer = storage.image_instance_buffer.clone();
 
         let commands = &ctx.draw_list().commands;
+        let mut sorted_commands: Vec<&DrawCommand> = commands.iter().collect();
+
+        sorted_commands.sort_by_key(|cmd| match &cmd.kind {
+            DrawKind::Rects { .. } => 0,
+            DrawKind::Images { .. } => 1,
+            DrawKind::Glyphs => 2,
+        });
+
         self.state.render(|pass| {
-            for command in commands {
+            for command in &sorted_commands {
                 let short_lived_storage = self.storage.borrow();
+                let clip = match &command.kind {
+                    // Text is clipped through TextArea.bounds instead.
+                    DrawKind::Glyphs => None,
+                    _ => command.clip,
+                };
+                let c = clip
+                    .unwrap_or(ClipRect {
+                        x: 0,
+                        y: 0,
+                        width: vw,
+                        height: vh,
+                    })
+                    .clamp_to(vw, vh);
+                if c.width == 0 || c.height == 0 {
+                    continue; // fully clipped away
+                }
+                pass.set_scissor_rect(c.x, c.y, c.width, c.height);
 
                 match &command.kind {
                     DrawKind::Rects { instance_range } => {

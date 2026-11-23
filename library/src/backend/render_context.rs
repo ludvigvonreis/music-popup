@@ -11,6 +11,8 @@ use std::{
 pub struct RenderContext {
     draw_list: DrawList,
     render_storage: Rc<RefCell<RenderStorage>>,
+    clip_stack: Vec<ClipRect>,
+    glyphs_queued: bool,
 }
 
 //#[derive(Debug)]
@@ -22,13 +24,14 @@ pub struct DrawList {
     pub text_instances: Vec<Rc<TextEntry>>,
     pub image_instances: Vec<ImageInstance>,
     pub image_assets: Vec<Rc<ImageData>>,
+    pub text_clips: Vec<Option<ClipRect>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct DrawCommand {
     pub kind: DrawKind,
     pub pipeline: PipelineType,
-    pub clip: Option<ClipRect>, // scissor rect; None = no clipping
+    pub clip: Option<ClipRect>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +54,47 @@ pub struct ClipRect {
     pub height: u32,
 }
 
+impl ClipRect {
+    /// Logical rect to whole pixels: round outward so edges never lose a pixel.
+    pub fn from_rect(r: crate::view::layout::Rect) -> Self {
+        let x0 = r.x.floor().max(0.0);
+        let y0 = r.y.floor().max(0.0);
+        let x1 = (r.x + r.w).ceil().max(x0);
+        let y1 = (r.y + r.h).ceil().max(y0);
+        ClipRect {
+            x: x0 as u32,
+            y: y0 as u32,
+            width: (x1 - x0) as u32,
+            height: (y1 - y0) as u32,
+        }
+    }
+
+    pub fn intersect(&self, o: &ClipRect) -> ClipRect {
+        let x0 = self.x.max(o.x);
+        let y0 = self.y.max(o.y);
+        let x1 = (self.x + self.width).min(o.x + o.width).max(x0);
+        let y1 = (self.y + self.height).min(o.y + o.height).max(y0);
+        ClipRect {
+            x: x0,
+            y: y0,
+            width: x1 - x0,
+            height: y1 - y0,
+        }
+    }
+
+    /// wgpu panics if the scissor leaves the render target.
+    pub fn clamp_to(&self, w: u32, h: u32) -> ClipRect {
+        let x = self.x.min(w);
+        let y = self.y.min(h);
+        ClipRect {
+            x,
+            y,
+            width: self.width.min(w - x),
+            height: self.height.min(h - y),
+        }
+    }
+}
+
 impl Default for DrawList {
     fn default() -> Self {
         Self {
@@ -61,6 +105,7 @@ impl Default for DrawList {
             text_instances: Default::default(),
             image_instances: Default::default(),
             image_assets: Default::default(),
+            text_clips: Default::default(),
         }
     }
 }
@@ -70,6 +115,8 @@ impl RenderContext {
         RenderContext {
             draw_list: Default::default(),
             render_storage: render_storage,
+            clip_stack: Vec::new(),
+            glyphs_queued: false,
         }
     }
 
@@ -111,12 +158,18 @@ impl RenderContext {
 
     pub fn text(&mut self, text_entry: Rc<TextEntry>) {
         self.draw_list.text_instances.push(text_entry);
+        let clip = self.current_clip();
+        self.draw_list.text_clips.push(clip);
 
-        self.draw_list.commands.push(DrawCommand {
-            kind: DrawKind::Glyphs,
-            pipeline: PipelineType::Text,
-            clip: None,
-        });
+        // glyphon renders every prepared area in one call, so queue it once.
+        if !self.glyphs_queued {
+            self.glyphs_queued = true;
+            self.draw_list.commands.push(DrawCommand {
+                kind: DrawKind::Glyphs,
+                pipeline: PipelineType::Text,
+                clip: None,
+            });
+        }
     }
 
     pub fn image(
@@ -154,5 +207,22 @@ impl RenderContext {
             pipeline: PipelineType::Image,
             clip,
         });
+    }
+
+    pub fn push_clip(&mut self, r: crate::view::layout::Rect) {
+        let new = ClipRect::from_rect(r);
+        let clip = match self.clip_stack.last() {
+            Some(parent) => parent.intersect(&new),
+            None => new,
+        };
+        self.clip_stack.push(clip);
+    }
+
+    pub fn pop_clip(&mut self) {
+        self.clip_stack.pop();
+    }
+
+    fn current_clip(&self) -> Option<ClipRect> {
+        self.clip_stack.last().copied()
     }
 }

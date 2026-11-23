@@ -6,7 +6,7 @@ pub type StyleLayer = Rc<RefCell<dyn FnMut(Style) -> Style>>;
 
 pub struct ViewState {
     pub(crate) view_id: ViewId,
-    pub(crate) style: Style,
+    pub style: Style,
     pub(crate) style_layers: Vec<StyleLayer>,
 }
 

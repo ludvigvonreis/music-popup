@@ -45,6 +45,7 @@ pub struct Style {
     pub border_color: Color,
     pub border_width: f32,
     pub shadow: Option<Shadow>,
+    pub clip_children: bool,
 }
 
 #[derive(Clone)]
@@ -72,11 +73,21 @@ impl Style {
             border_color: Color::from_hex("#00000000"),
             border_width: 0.0,
             shadow: None,
+            clip_children: false,
         }
     }
 }
 
 impl Style {
+    pub fn clip(mut self) -> Self {
+        self.clip_children = true;
+        self.layout.overflow = taffy::Point {
+            x: taffy::Overflow::Hidden,
+            y: taffy::Overflow::Hidden,
+        };
+        self
+    }
+
     /// Inset border. Also shrinks the content box, like CSS border-box.
     pub fn border(mut self, width: f32, color: Color) -> Self {
         self.border_width = width;
@@ -168,6 +179,28 @@ impl Style {
     }
     pub fn basis(mut self, v: Dimension) -> Self {
         self.layout.flex_basis = v;
+        self
+    }
+
+    pub fn absolute_fill(mut self) -> Self {
+        self.layout.position = taffy::Position::Absolute;
+        self.layout.inset = Rect {
+            left: length(0.0_f32),
+            right: length(0.0_f32),
+            top: length(0.0_f32),
+            bottom: length(0.0_f32),
+        };
+        self
+    }
+
+    pub fn absolute_inset(mut self, v: f32) -> Self {
+        self.layout.position = taffy::Position::Absolute;
+        self.layout.inset = Rect {
+            left: length(v),
+            right: length(v),
+            top: length(v),
+            bottom: length(v),
+        };
         self
     }
 }

@@ -52,6 +52,18 @@ impl View for Div {
             None,
         );
 
+        let clip = s.clip_children;
+        if clip {
+            ctx.push_clip(r);
+        }
+        self.id()
+            .children()
+            .iter()
+            .for_each(|f| f.view().borrow().paint(ctx));
+        if clip {
+            ctx.pop_clip();
+        }
+
         self.id()
             .children()
             .iter()
